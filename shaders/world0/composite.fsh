@@ -122,23 +122,25 @@ void main() {
     }
 
     /* LIGHT */
-    float sun_angle = sunAngle < 0.5 ? 0.5 - 2 * abs(sunAngle - 0.25) : 0;
-    vec3 sky_light = mix(vec3(0.1),
-        vec3(
-            1.5 * (exp(0.01 - 0.01 / (sin(PI * (0.05 + 0.95 * sun_angle))))),
-            1.5 * (exp(0.1 - 0.1  / (sin(PI * (0.05 + 0.95 * sun_angle))))),
-            1.5 * (exp(0.3 - 0.3  / (sin(PI * (0.05 + 0.95 * sun_angle)))))
-        ), smoothstep(0, 0.02, sun_angle));
+    if (block_id > 0.5) {
+        float sun_angle = sunAngle < 0.5 ? 0.5 - 2 * abs(sunAngle - 0.25) : 0;
+        vec3 sky_light = mix(vec3(0.1),
+            vec3(
+                1.5 * (exp(0.01 - 0.01 / (sin(PI * (0.05 + 0.95 * sun_angle))))),
+                1.5 * (exp(0.1 - 0.1  / (sin(PI * (0.05 + 0.95 * sun_angle))))),
+                1.5 * (exp(0.3 - 0.3  / (sin(PI * (0.05 + 0.95 * sun_angle)))))
+            ), smoothstep(0, 0.02, sun_angle));
 
-    #if LIGHT_MODE
-        vec3 block_light = LIGHT_CLASSIC_INTENSITY * 1.0 * data1.y * LIGHT_COLOR;
-    #else
-        float block_light_dist = LIGHT_PHYSICAL_CLOSEST - log(clamp(1.07 * data1.y, 0, 1));
-        vec3 block_light = LIGHT_PHYSICAL_INTENSITY * 0.25 / (block_light_dist * block_light_dist) * LIGHT_COLOR;
-    #endif
+        #if LIGHT_MODE
+            vec3 block_light = LIGHT_CLASSIC_INTENSITY * 1.0 * data1.y * LIGHT_COLOR;
+        #else
+            float block_light_dist = LIGHT_PHYSICAL_CLOSEST - log(clamp(1.07 * data1.y, 0, 1));
+            vec3 block_light = LIGHT_PHYSICAL_INTENSITY * 0.25 / (block_light_dist * block_light_dist) * LIGHT_COLOR;
+        #endif
 
-    sky_light = sky_light * (1 - sky_light_shadow);
-    color = color * sqrt(block_light * block_light + sky_light * sky_light);
+        sky_light = sky_light * (1 - sky_light_shadow);
+        color = color * sqrt(block_light * block_light + sky_light * sky_light);
+    }
 
     /* TRANSLUCENT */
     color = color + translucent.rgb;
