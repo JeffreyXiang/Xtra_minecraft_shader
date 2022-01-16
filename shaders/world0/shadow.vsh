@@ -1,12 +1,12 @@
 #version 120
  
-#define SHADOW_FISHEY_LENS_STRENGTH 0.85
+#define SHADOW_FISHEY_LENS_INTENSITY 0.85
  
 varying vec2 texcoord;
 
 vec2 fish_len_distortion(vec2 ndc_coord_xy) {
     float dist = length(ndc_coord_xy);
-    float distort = (1.0 - SHADOW_FISHEY_LENS_STRENGTH ) + dist * SHADOW_FISHEY_LENS_STRENGTH;
+    float distort = (1.0 - SHADOW_FISHEY_LENS_INTENSITY ) + dist * SHADOW_FISHEY_LENS_INTENSITY;
     return ndc_coord_xy.xy / distort;
 }
  
