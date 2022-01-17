@@ -17,5 +17,5 @@ void main() {
 
     gl_FragData[0] = blockColor;
     gl_FragData[1] = vec4(normal, 1.0);
-    gl_FragData[2] = vec4((heldBlockLightValue > 0 || heldBlockLightValue2 > 0) ? 2 : 1, lightMapCoord.s, 0.0, 1.0);
+    gl_FragData[2] = vec4((heldBlockLightValue > 0 || heldBlockLightValue2 > 0) ? 2 : 1, lightMapCoord.s, lightMapCoord.t, 1.0);
 }

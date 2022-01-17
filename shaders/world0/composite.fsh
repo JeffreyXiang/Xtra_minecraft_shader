@@ -7,17 +7,18 @@
 #define SHADOW_FISHEY_LENS_INTENSITY 0.85
 
 #define LIGHT_MODE 0                        // 1 for classic, 0 for physical
-#define LIGHT_COLOR vec3(1, 0.72, 0.45)     // 4400K
-#define LIGHT_CLASSIC_INTENSITY 1.0
-#define LIGHT_PHYSICAL_INTENSITY 1.0
-#define LIGHT_PHYSICAL_CLOSEST 0.25
+#define BLOCK_LIGHT_COLOR vec3(1, 0.72, 0.45)     // 4400K
+#define BLOCK_LIGHT_CLASSIC_INTENSITY 1.5
+#define BLOCK_LIGHT_PHYSICAL_INTENSITY 3.0
+#define BLOCK_LIGHT_PHYSICAL_CLOSEST 0.25
+#define SKY_LIGHT_INTENSITY 3.0
 
 const int RGB16F = 0;
 const int gnormalFormat = RGB16F;
 const int R32F = 0;
 const int gdepthFormat = R32F;
-const int RG16F = 0;
-const int gaux1Format = RG16F;
+const int RGBA16F = 0;
+const int gaux1Format = RGBA16F;
 const int shadowMapResolution = 4096; 
 const float	sunPathRotation	= -30.0;
 
@@ -32,6 +33,7 @@ uniform sampler2D shadow;
 uniform float far;
 uniform vec3 shadowLightPosition;
 uniform float sunAngle;
+uniform ivec2 eyeBrightnessSmooth;
 
 uniform mat4 gbufferModelView;
 uniform mat4 gbufferModelViewInverse;
@@ -96,15 +98,10 @@ void main() {
     vec3 view_coord = screen_coord_to_view_coord(screen_coord);
     float dist = length(view_coord) / far;
 
-    /* BLOOM EXTRACT */
-    vec3 bloom_color = vec3(0.0);
-    if (block_id > 1.5) {
-        bloom_color = mix(vec3(0.0), color, smoothstep(0.25, 0.5, grayscale(color)));
-    }   
-
     /* SHADOW */
     float sky_light_shadow = 0.0;
-    if (block_id > 0.5 && block_id < 1.5) {
+    float in_shadow = 0.0;
+    if (block_id > 0.5) {
         vec3 screen_coord = vec3(texcoord, depth1);
         vec3 view_coord = screen_coord_to_view_coord(screen_coord);
         view_coord += SHADOW_EPSILON * normal;
@@ -116,36 +113,64 @@ void main() {
         float current_depth = shadow_coord.z;
         float closest_depth = texture2D(shadow, fish_len_distortion(shadow_coord.xy * 2 - 1) * 0.5 + 0.5).x;
         sky_light_shadow = 1 - smoothstep(-0.05, 0.0, dot(light_direction, normal));
-        sky_light_shadow *= current_depth >= closest_depth ? 0 : 1;
+        in_shadow = current_depth >= closest_depth ? 1 : 0;
+        sky_light_shadow *= 1 - in_shadow;
         sky_light_shadow = SHADOW_INTENSITY * (1 - sky_light_shadow);
         sky_light_shadow *= shaodw_dist_weight;
     }
 
     /* LIGHT */
-    if (block_id > 0.5) {
-        float sun_angle = sunAngle < 0.5 ? 0.5 - 2 * abs(sunAngle - 0.25) : 0;
-        vec3 sky_light = mix(vec3(0.1),
-            vec3(
-                1.5 * (exp(0.01 - 0.01 / (sin(PI * (0.05 + 0.95 * sun_angle))))),
-                1.5 * (exp(0.1 - 0.1  / (sin(PI * (0.05 + 0.95 * sun_angle))))),
-                1.5 * (exp(0.3 - 0.3  / (sin(PI * (0.05 + 0.95 * sun_angle)))))
-            ), smoothstep(0, 0.02, sun_angle));
+    float sun_angle = sunAngle < 0.5 ? 0.5 - 2 * abs(sunAngle - 0.25) : 0;
+    vec3 sky_light = SKY_LIGHT_INTENSITY * mix(vec3(0.05),
+        vec3(
+            (exp(0.01 - 0.01 / (sin(PI * (0.05 + 0.95 * sun_angle))))),
+            (exp(0.1 - 0.1  / (sin(PI * (0.05 + 0.95 * sun_angle))))),
+            (exp(0.3 - 0.3  / (sin(PI * (0.05 + 0.95 * sun_angle)))))
+        ), smoothstep(0, 0.02, sun_angle));
+    float sky_brightness = sky_light.r;
+    float eye_sky_brightness = sky_brightness * (eyeBrightnessSmooth.y) / 240.0;
 
+    if (block_id > 0.5) {
         #if LIGHT_MODE
-            vec3 block_light = LIGHT_CLASSIC_INTENSITY * 1.0 * data1.y * LIGHT_COLOR;
+            vec3 block_light = BLOCK_LIGHT_CLASSIC_INTENSITY * data1.y * BLOCK_LIGHT_COLOR;
         #else
-            float block_light_dist = LIGHT_PHYSICAL_CLOSEST - log(clamp(1.07 * data1.y, 0, 1));
-            vec3 block_light = LIGHT_PHYSICAL_INTENSITY * 0.25 / (block_light_dist * block_light_dist) * LIGHT_COLOR;
+            float block_light_dist = BLOCK_LIGHT_PHYSICAL_CLOSEST - log(clamp(1.07 * data1.y, 0, 1));
+            vec3 block_light = BLOCK_LIGHT_PHYSICAL_INTENSITY * BLOCK_LIGHT_PHYSICAL_CLOSEST * BLOCK_LIGHT_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * BLOCK_LIGHT_COLOR;
         #endif
 
-        sky_light = sky_light * (1 - sky_light_shadow);
-        color = color * sqrt(block_light * block_light + sky_light * sky_light);
+        sky_light *= (in_shadow > 0.5 ? data1.z : 1) * (1 - sky_light_shadow);
+        color *= sqrt(block_light * block_light + sky_light * sky_light);
+    }
+    else {
+        color *= clamp(sky_brightness / 1.2, 1, 100);
+    }
+
+    /* EXPOSURE ADJUST */
+    // #if LIGHT_MODE
+    //     float eye_block_brightness = BLOCK_LIGHT_CLASSIC_INTENSITY * eyeBrightnessSmooth.x / 240.0;
+    // #else
+    //     float eye_block_light_dist = BLOCK_LIGHT_PHYSICAL_CLOSEST - log(clamp(1.07 * eyeBrightnessSmooth.x / 240.0, 0, 1));
+    //     float eye_block_brightness = BLOCK_LIGHT_PHYSICAL_INTENSITY * BLOCK_LIGHT_PHYSICAL_CLOSEST * BLOCK_LIGHT_PHYSICAL_CLOSEST / (eye_block_light_dist * eye_block_light_dist) * eyeBrightnessSmooth.x / 240.0;
+    // #endif
+    float eye_block_brightness = 0;
+    float eye_brightness = sqrt(eye_block_brightness * eye_block_brightness + eye_sky_brightness * eye_sky_brightness);
+
+    color *= clamp(1.2 / eye_brightness, 0, 1);
+
+    /* BLOOM EXTRACT */
+    vec3 bloom_color = vec3(0.0);
+    if (block_id > 1.5) {
+        bloom_color = 0.5 * mix(vec3(0.0), color, smoothstep(0.75, 1, grayscale(color)));
+        // color += 0.5 * bloom_color;
+    }
+    else {
+        bloom_color = 0.5 * mix(vec3(0.0), color, smoothstep(1.5, 2, grayscale(color)));
     }
 
     /* TRANSLUCENT */
     color = color + translucent.rgb;
     
-    gl_FragData[0] = vec4(color + 0.5 * bloom_color, 1.0);
+    gl_FragData[0] = vec4(color, 1.0);
     gl_FragData[1] = vec4(dist, 0.0, 0.0, 0.0);
     gl_FragData[2] = vec4(bloom_color, 1.0);
 }
