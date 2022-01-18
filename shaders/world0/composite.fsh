@@ -163,8 +163,8 @@ void main() {
         #if ILLUMINATION_MODE
             vec3 block_light = BLOCK_ILLUMINATION_CLASSIC_INTENSITY * data1.y * BLOCK_ILLUMINATION_COLOR;
         #else
-            float block_light_dist = BLOCK_ILLUMINATION_PHYSICAL_CLOSEST + (1 - clamp((15 * data1.y - 1) / 13, 0, 1));
-            block_light_dist += ILLUMINATION_EPSILON * block_light_dist / (1 + BLOCK_ILLUMINATION_PHYSICAL_CLOSEST - block_light_dist);
+            float block_light_dist = 1 - clamp((15 * data1.y - 1) / 13, 0, 1);
+            block_light_dist += ILLUMINATION_EPSILON * block_light_dist / (1 - block_light_dist) + BLOCK_ILLUMINATION_PHYSICAL_CLOSEST;
             vec3 block_light = BLOCK_ILLUMINATION_PHYSICAL_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * BLOCK_ILLUMINATION_COLOR;
         #endif
 
