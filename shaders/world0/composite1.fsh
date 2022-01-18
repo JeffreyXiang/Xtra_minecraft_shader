@@ -42,7 +42,8 @@ void main() {
     float laplacian = -1 * depth00 - 1 * depth01 - 1 * depth02 - 1 * depth10 + 8 * depth11 - 1 * depth12 - 1 * depth20 - 1 * depth21 - 1 * depth22;
     laplacian = smoothstep(0.1, 0.2, abs(laplacian));
 
-    color = color * (1 - (depth < 1 ? 0.25 : 0.5) * laplacian) - 0.1 * laplacian;
+    // color = color * (1 - (depth < 1 ? 0.25 : 0.5) * laplacian) - 0.1 * laplacian;
+    color *= laplacian;
 
     gl_FragData[0] = vec4(color, 1.0);
 }

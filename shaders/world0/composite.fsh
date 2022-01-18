@@ -41,11 +41,12 @@
 #define BLOCK_ILLUMINATION_PHYSICAL_CLOSEST 0.25    //[0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5]
 #define SKY_ILLUMINATION_INTENSITY 3.0  //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
 
+const int RGBA16F = 0;
+const int gcolorFormat = RGBA16F;
 const int RGB16F = 0;
 const int gnormalFormat = RGB16F;
 const int R32F = 0;
 const int gdepthFormat = R32F;
-const int RGBA16F = 0;
 const int gaux1Format = RGBA16F;
 const int shadowMapResolution = 4096;   //[1024 2048 4096] 
 const float	sunPathRotation	= -30.0;
@@ -169,7 +170,7 @@ void main() {
         #endif
 
         sky_light *= (in_shadow > 0.5 ? data1.z : 1) * (1 - sky_light_shadow);
-        color *= sqrt(block_light * block_light + sky_light * sky_light);
+        color *= block_light + sky_light;
     }
     else {
         color *= clamp(sky_brightness / 1.2, 1, 100);
