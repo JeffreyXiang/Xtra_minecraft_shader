@@ -3,15 +3,43 @@
 #define PI 3.1415926535898
 
 #define SHADOW_EPSILON 1e-1
-#define SHADOW_INTENSITY 0.5
+#define SHADOW_INTENSITY 0.5 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define SHADOW_FISHEY_LENS_INTENSITY 0.85
 
-#define LIGHT_MODE 0                        // 1 for classic, 0 for physical
-#define BLOCK_LIGHT_COLOR vec3(1, 0.72, 0.45)     // 4400K
-#define BLOCK_LIGHT_CLASSIC_INTENSITY 1.5
-#define BLOCK_LIGHT_PHYSICAL_INTENSITY 3.0
-#define BLOCK_LIGHT_PHYSICAL_CLOSEST 0.25
-#define SKY_LIGHT_INTENSITY 3.0
+#define ILLUMINATION_EPSILON 1e-2
+#define ILLUMINATION_MODE 0 // [0 1]
+#define BLOCK_ILLUMINATION_COLOR_TEMPERATURE 4400   // [2400 2800 3200 3600 4000 4400 4800 5200 5600 6000 6400 6800 7200]
+#if BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 2400
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.3364, 0.0501)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 2800
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.4195, 0.1119)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 3200
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.4970, 0.1879)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 3600
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.5689, 0.2745)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 4000
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.6354, 0.3684)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 4400
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.6966, 0.4668)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 4800
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.7528, 0.5675)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 5200
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.8044, 0.6685)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 5600
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.8518, 0.7686)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 6000
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.8952, 0.8666)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 6400
+    #define BLOCK_ILLUMINATION_COLOR vec3(1.0000, 0.9351, 0.9616)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 6800
+    #define BLOCK_ILLUMINATION_COLOR vec3(0.9488, 0.9219, 1.0501)
+#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 7200
+    #define BLOCK_ILLUMINATION_COLOR vec3(0.8753, 0.8799, 1.0501)
+#endif
+#define BLOCK_ILLUMINATION_CLASSIC_INTENSITY 1.5    //[0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5]
+#define BLOCK_ILLUMINATION_PHYSICAL_INTENSITY 3.0   //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
+#define BLOCK_ILLUMINATION_PHYSICAL_CLOSEST 0.25    //[0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5]
+#define SKY_ILLUMINATION_INTENSITY 3.0  //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
 
 const int RGB16F = 0;
 const int gnormalFormat = RGB16F;
@@ -19,7 +47,7 @@ const int R32F = 0;
 const int gdepthFormat = R32F;
 const int RGBA16F = 0;
 const int gaux1Format = RGBA16F;
-const int shadowMapResolution = 4096; 
+const int shadowMapResolution = 4096;   //[1024 2048 4096] 
 const float	sunPathRotation	= -30.0;
 
 uniform sampler2D gcolor;
@@ -119,23 +147,25 @@ void main() {
         sky_light_shadow *= shaodw_dist_weight;
     }
 
-    /* LIGHT */
+    /* ILLUMINATION */
     float sun_angle = sunAngle < 0.5 ? 0.5 - 2 * abs(sunAngle - 0.25) : 0;
-    vec3 sky_light = SKY_LIGHT_INTENSITY * mix(vec3(0.05),
-        vec3(
-            (exp(0.01 - 0.01 / (sin(PI * (0.05 + 0.95 * sun_angle))))),
-            (exp(0.1 - 0.1  / (sin(PI * (0.05 + 0.95 * sun_angle))))),
-            (exp(0.3 - 0.3  / (sin(PI * (0.05 + 0.95 * sun_angle)))))
-        ), smoothstep(0, 0.02, sun_angle));
-    float sky_brightness = sky_light.r;
-    float eye_sky_brightness = sky_brightness * (eyeBrightnessSmooth.y) / 240.0;
+    vec3 sun_light = vec3(
+        (exp(0.01 - 0.01 / (sin(PI * (0.05 + 0.95 * sun_angle))))),
+        (exp(0.1 - 0.1  / (sin(PI * (0.05 + 0.95 * sun_angle))))),
+        (exp(0.3 - 0.3  / (sin(PI * (0.05 + 0.95 * sun_angle)))))
+    );
+    vec3 moon_light = vec3(0.05);
+    float sun_moon_mix = smoothstep(0, 0.02, sun_angle);
+    vec3 sky_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sun_moon_mix);
+    float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(0.05, 1, sun_moon_mix);
 
     if (block_id > 0.5) {
-        #if LIGHT_MODE
-            vec3 block_light = BLOCK_LIGHT_CLASSIC_INTENSITY * data1.y * BLOCK_LIGHT_COLOR;
+        #if ILLUMINATION_MODE
+            vec3 block_light = BLOCK_ILLUMINATION_CLASSIC_INTENSITY * data1.y * BLOCK_ILLUMINATION_COLOR;
         #else
-            float block_light_dist = BLOCK_LIGHT_PHYSICAL_CLOSEST - log(clamp(1.07 * data1.y, 0, 1));
-            vec3 block_light = BLOCK_LIGHT_PHYSICAL_INTENSITY * BLOCK_LIGHT_PHYSICAL_CLOSEST * BLOCK_LIGHT_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * BLOCK_LIGHT_COLOR;
+            float block_light_dist = BLOCK_ILLUMINATION_PHYSICAL_CLOSEST + (1 - clamp((15 * data1.y - 1) / 13, 0, 1));
+            block_light_dist += ILLUMINATION_EPSILON * block_light_dist / (1 + BLOCK_ILLUMINATION_PHYSICAL_CLOSEST - block_light_dist);
+            vec3 block_light = BLOCK_ILLUMINATION_PHYSICAL_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * BLOCK_ILLUMINATION_COLOR;
         #endif
 
         sky_light *= (in_shadow > 0.5 ? data1.z : 1) * (1 - sky_light_shadow);
@@ -146,15 +176,7 @@ void main() {
     }
 
     /* EXPOSURE ADJUST */
-    // #if LIGHT_MODE
-    //     float eye_block_brightness = BLOCK_LIGHT_CLASSIC_INTENSITY * eyeBrightnessSmooth.x / 240.0;
-    // #else
-    //     float eye_block_light_dist = BLOCK_LIGHT_PHYSICAL_CLOSEST - log(clamp(1.07 * eyeBrightnessSmooth.x / 240.0, 0, 1));
-    //     float eye_block_brightness = BLOCK_LIGHT_PHYSICAL_INTENSITY * BLOCK_LIGHT_PHYSICAL_CLOSEST * BLOCK_LIGHT_PHYSICAL_CLOSEST / (eye_block_light_dist * eye_block_light_dist) * eyeBrightnessSmooth.x / 240.0;
-    // #endif
-    float eye_block_brightness = 0;
-    float eye_brightness = sqrt(eye_block_brightness * eye_block_brightness + eye_sky_brightness * eye_sky_brightness);
-
+    float eye_brightness = sky_brightness * (eyeBrightnessSmooth.y) / 240.0;
     color *= clamp(1.2 / eye_brightness, 0, 1);
 
     /* BLOOM EXTRACT */

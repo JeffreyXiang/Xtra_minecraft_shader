@@ -1,0 +1,25 @@
+option.SHADOW_INTENSITY=Shadow Intensity
+option.SHADOW_INTENSITY.comment=Shadow intensity. The higher the value, the darker the shadow.
+
+option.shadowMapResolution=Shadow Map Resolution
+option.shadowMapResolution.comment=Resolution of the shadow map. The higher the value, the finer the shadow.
+
+option.ILLUMINATION_MODE=Block Illumination Mode
+option.ILLUMINATION_MODE.comment=Mode of block illumination. <Physical> for more realistic inverse square illumination. <Classic> for original linear illumination.
+value.ILLUMINATION_MODE.0=Physical
+value.ILLUMINATION_MODE.1=Classic
+
+option.BLOCK_ILLUMINATION_COLOR_TEMPERATURE=Color Temperature
+option.BLOCK_ILLUMINATION_COLOR_TEMPERATURE.comment=Color temperature of block illumination. The lower the value, the warmer the light emitted by blocks. 
+
+option.BLOCK_ILLUMINATION_CLASSIC_INTENSITY=Classic Block Illumination Intensity
+option.BLOCK_ILLUMINATION_CLASSIC_INTENSITY.comment=Max intensity of <Classic> illumination Mode.
+
+option.BLOCK_ILLUMINATION_PHYSICAL_INTENSITY=Physical Block Illumination Intensity
+option.BLOCK_ILLUMINATION_PHYSICAL_INTENSITY.comment=Max intensity of <Physical> illumination Mode.
+
+option.BLOCK_ILLUMINATION_PHYSICAL_CLOSEST=Physical Block Illumination Closest
+option.BLOCK_ILLUMINATION_PHYSICAL_CLOSEST.comment=Min distance of <Physical> illumination Mode. The higher the value, the larger the lightened area.
+
+option.SKY_ILLUMINATION_INTENSITY=Sky Illumination Intensity
+option.SKY_ILLUMINATION_INTENSITY.comment=Min distance of <Physical> illumination Mode. The higher the value, the larger the lightened area.
