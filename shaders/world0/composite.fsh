@@ -2,11 +2,13 @@
 
 #define PI 3.1415926535898
 
+#define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
+
 #define SHADOW_EPSILON 1e-1
 #define SHADOW_INTENSITY 0.5 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define SHADOW_FISHEY_LENS_INTENSITY 0.85
 
-#define ILLUMINATION_EPSILON 1e-2
+#define ILLUMINATION_EPSILON 0.5
 #define ILLUMINATION_MODE 0 // [0 1]
 #define BLOCK_ILLUMINATION_COLOR_TEMPERATURE 4400   // [2400 2800 3200 3600 4000 4400 4800 5200 5600 6000 6400 6800 7200]
 #if BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 2400
@@ -38,7 +40,7 @@
 #endif
 #define BLOCK_ILLUMINATION_CLASSIC_INTENSITY 1.5    //[0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5]
 #define BLOCK_ILLUMINATION_PHYSICAL_INTENSITY 3.0   //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
-#define BLOCK_ILLUMINATION_PHYSICAL_CLOSEST 0.25    //[0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5]
+#define BLOCK_ILLUMINATION_PHYSICAL_CLOSEST 0.5    //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define SKY_ILLUMINATION_INTENSITY 3.0  //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
 
 const int RGBA16F = 0;
@@ -62,7 +64,6 @@ uniform sampler2D shadow;
 uniform float far;
 uniform vec3 shadowLightPosition;
 uniform float sunAngle;
-uniform ivec2 eyeBrightnessSmooth;
 
 uniform mat4 gbufferModelView;
 uniform mat4 gbufferModelViewInverse;
@@ -119,13 +120,17 @@ void main() {
     float depth0 = texture2D(depthtex0, texcoord).x;
     float depth1 = texture2D(depthtex1, texcoord).x;
     vec3 normal = texture2D(gnormal, texcoord).xyz;
-    vec4 translucent = texture2D(composite, texcoord);
+    vec3 translucent = texture2D(composite, texcoord).rgb;
     vec4 data1 = texture2D(gaux1, texcoord);
     float block_id = data1.x;
 
     vec3 screen_coord = vec3(texcoord, depth0);
     vec3 view_coord = screen_coord_to_view_coord(screen_coord);
     float dist = length(view_coord) / far;
+
+    /* INVERSE GAMMA */
+    color = pow(color, vec3(GAMMA));
+    translucent = pow(translucent, vec3(GAMMA));
 
     /* SHADOW */
     float sky_light_shadow = 0.0;
@@ -155,17 +160,17 @@ void main() {
         (exp(0.1 - 0.1  / (sin(PI * (0.05 + 0.95 * sun_angle))))),
         (exp(0.3 - 0.3  / (sin(PI * (0.05 + 0.95 * sun_angle)))))
     );
-    vec3 moon_light = vec3(0.05);
+    vec3 moon_light = vec3(0.005);
     float sun_moon_mix = smoothstep(0, 0.02, sun_angle);
     vec3 sky_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sun_moon_mix);
-    float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(0.05, 1, sun_moon_mix);
+    float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(0.005, 1, sun_moon_mix);
 
     if (block_id > 0.5) {
         #if ILLUMINATION_MODE
             vec3 block_light = BLOCK_ILLUMINATION_CLASSIC_INTENSITY * data1.y * BLOCK_ILLUMINATION_COLOR;
         #else
-            float block_light_dist = BLOCK_ILLUMINATION_PHYSICAL_CLOSEST + (1 - clamp((15 * data1.y - 1) / 13, 0, 1));
-            block_light_dist += ILLUMINATION_EPSILON * block_light_dist / (1 + BLOCK_ILLUMINATION_PHYSICAL_CLOSEST - block_light_dist);
+            float block_light_dist = block_id > 1.5 ? 0 : 13 - clamp(15 * data1.y - 1, 0, 13);
+            block_light_dist = (1 - ILLUMINATION_EPSILON) * block_light_dist + ILLUMINATION_EPSILON * block_light_dist / (13 - block_light_dist) + BLOCK_ILLUMINATION_PHYSICAL_CLOSEST;
             vec3 block_light = BLOCK_ILLUMINATION_PHYSICAL_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * BLOCK_ILLUMINATION_COLOR;
         #endif
 
@@ -176,22 +181,17 @@ void main() {
         color *= clamp(sky_brightness / 1.2, 1, 100);
     }
 
-    /* EXPOSURE ADJUST */
-    float eye_brightness = sky_brightness * (eyeBrightnessSmooth.y) / 240.0;
-    color *= clamp(1.2 / eye_brightness, 0, 1);
-
     /* BLOOM EXTRACT */
-    vec3 bloom_color = vec3(0.0);
+    vec3 bloom_color = pow(color, vec3(1 / GAMMA));
     if (block_id > 1.5) {
-        bloom_color = 0.5 * mix(vec3(0.0), color, smoothstep(0.75, 1, grayscale(color)));
-        // color += 0.5 * bloom_color;
+        bloom_color = 0.5 * mix(vec3(0.0), bloom_color, smoothstep(0.75, 1, grayscale(bloom_color)));
     }
     else {
-        bloom_color = 0.5 * mix(vec3(0.0), color, smoothstep(1.5, 2, grayscale(color)));
+        bloom_color = 0.5 * mix(vec3(0.0), bloom_color, smoothstep(10, 10, grayscale(bloom_color)));
     }
 
     /* TRANSLUCENT */
-    color = color + translucent.rgb;
+    color = color + translucent;
     
     gl_FragData[0] = vec4(color, 1.0);
     gl_FragData[1] = vec4(dist, 0.0, 0.0, 0.0);

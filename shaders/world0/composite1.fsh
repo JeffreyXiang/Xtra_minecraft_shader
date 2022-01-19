@@ -1,5 +1,6 @@
 #version 120
 
+#define OUTLINE_ENABLE 1 // [0 1]
 #define OUTLINE_WIDTH 1
 
 uniform sampler2D gcolor;
@@ -8,7 +9,6 @@ uniform sampler2D depthtex0;
 
 uniform float viewWidth;
 uniform float viewHeight;
-uniform mat4 gbufferProjection;
 
 varying vec2 texcoord;
 
@@ -21,6 +21,7 @@ void main() {
     vec3 color = texture2D(gcolor, texcoord).rgb;
     float depth = texture2D(depthtex0, texcoord).x;
 
+#if OUTLINE_ENABLE
     /* OUTLINE */
     float depth00 = log(texture2D(gdepth, texcoord + offset(vec2(-1, -1))).x);
     float depth01 = log(texture2D(gdepth, texcoord + offset(vec2(0, -1))).x);
@@ -42,8 +43,8 @@ void main() {
     float laplacian = -1 * depth00 - 1 * depth01 - 1 * depth02 - 1 * depth10 + 8 * depth11 - 1 * depth12 - 1 * depth20 - 1 * depth21 - 1 * depth22;
     laplacian = smoothstep(0.1, 0.2, abs(laplacian));
 
-    // color = color * (1 - (depth < 1 ? 0.25 : 0.5) * laplacian) - 0.1 * laplacian;
-    color *= laplacian;
+    color = clamp(color * (1 - 0.5 * laplacian) - 0.1 * laplacian, 0, 100);
+#endif
 
     gl_FragData[0] = vec4(color, 1.0);
 }

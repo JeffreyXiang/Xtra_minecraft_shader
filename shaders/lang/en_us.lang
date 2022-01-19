@@ -23,3 +23,8 @@ option.BLOCK_ILLUMINATION_PHYSICAL_CLOSEST.comment=Min distance of <Physical> il
 
 option.SKY_ILLUMINATION_INTENSITY=Sky Illumination Intensity
 option.SKY_ILLUMINATION_INTENSITY.comment=Min distance of <Physical> illumination Mode. The higher the value, the larger the lightened area.
+
+option.OUTLINE_ENABLE=Outline
+option.OUTLINE_ENABLE.comment=Add outline to the scene. Cartoon style rendering
+value.OUTLINE_ENABLE.1=Enable
+value.OUTLINE_ENABLE.0=Disable
