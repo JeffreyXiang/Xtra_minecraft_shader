@@ -24,7 +24,7 @@ uniform int isEyeInWater;
 varying vec2 texcoord;
 
 vec2 offset(vec2 ori) {
-    return vec2(ori.x * OUTLINE_WIDTH / viewWidth, ori.y * OUTLINE_WIDTH / viewHeight);
+    return vec2(ori.x / viewWidth, ori.y / viewHeight);
 }
 
 /* DRAWBUFFERS: 0 */
@@ -47,15 +47,15 @@ void main() {
     float dist_n = dist / far;
     if (dist_n < 1) {
         /* OUTLINE */
-        float depth00 = log(texture2D(gdepth, texcoord + offset(vec2(-1, -1))).x);
-        float depth01 = log(texture2D(gdepth, texcoord + offset(vec2(0, -1))).x);
-        float depth02 = log(texture2D(gdepth, texcoord + offset(vec2(1, -1))).x);
-        float depth10 = log(texture2D(gdepth, texcoord + offset(vec2(-1, 0))).x);
+        float depth00 = log(texture2D(gdepth, texcoord + offset(vec2(-OUTLINE_WIDTH, -OUTLINE_WIDTH))).x);
+        float depth01 = log(texture2D(gdepth, texcoord + offset(vec2(0, -OUTLINE_WIDTH))).x);
+        float depth02 = log(texture2D(gdepth, texcoord + offset(vec2(OUTLINE_WIDTH, -OUTLINE_WIDTH))).x);
+        float depth10 = log(texture2D(gdepth, texcoord + offset(vec2(-OUTLINE_WIDTH, 0))).x);
         float depth11 = log(texture2D(gdepth, texcoord + offset(vec2(0, 0))).x);
-        float depth12 = log(texture2D(gdepth, texcoord + offset(vec2(1, 0))).x);
-        float depth20 = log(texture2D(gdepth, texcoord + offset(vec2(-1, 1))).x);
-        float depth21 = log(texture2D(gdepth, texcoord + offset(vec2(0, 1))).x);
-        float depth22 = log(texture2D(gdepth, texcoord + offset(vec2(1, 1))).x);
+        float depth12 = log(texture2D(gdepth, texcoord + offset(vec2(OUTLINE_WIDTH, 0))).x);
+        float depth20 = log(texture2D(gdepth, texcoord + offset(vec2(-OUTLINE_WIDTH, OUTLINE_WIDTH))).x);
+        float depth21 = log(texture2D(gdepth, texcoord + offset(vec2(0, OUTLINE_WIDTH))).x);
+        float depth22 = log(texture2D(gdepth, texcoord + offset(vec2(OUTLINE_WIDTH, OUTLINE_WIDTH))).x);
 
         /* _SOBEL */
         // float sobel_h = -1 * depth00 + 1 * depth02 - 2 * depth10 + 2 * depth12 - 1 * depth20 + 1 * depth22;
@@ -79,7 +79,7 @@ void main() {
     float s = 1;
     for (int i = 2; i < 8; i++) {
         s *= 0.5;
-        bloom += texture2D(composite, texcoord * s + 1 - 2 * s).rgb / (64 * s);
+        bloom += texture2D(composite, texcoord * s + 1 - 2 * s + offset(vec2(0.5, 0))).rgb / (64 * s);
     }
     color += bloom;
     

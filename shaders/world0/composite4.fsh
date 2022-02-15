@@ -5,7 +5,7 @@
 #define SKY_ILLUMINATION_INTENSITY 3.0  //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
 
 #define SSR_STEP_MAX_ITER 100
-#define SSR_DIV_MAX_ITER 10
+#define SSR_DIV_MAX_ITER 8
 #define SSR_F0 0.04
 #define SSR_ETA 1.05
 
@@ -182,9 +182,14 @@ void main() {
             f_r = SSR_F0 + (1 - SSR_F0) * f_r * f_r * f_r * f_r * f_r;
             for (i = 0; i < SSR_STEP_MAX_ITER; i++) {
                 k = length((direction - dot(direction, reflect_coord) / dot(reflect_coord, reflect_coord) * reflect_coord).xy);
-                t_step = 0.001 * -view_coord.z / k * (reflect_dist + 10);
-                t_step = t_step > 2 ? 2 : t_step;
-                t_step *= 0.75 + 0.5 * rand();
+                if (is_water_in == 1 && reflect_dist > 50) i = SSR_STEP_MAX_ITER - 1;
+                if (i == SSR_STEP_MAX_ITER - 1)
+                    t_step = far;
+                else {
+                    t_step = 0.001 * -view_coord.z / k * (reflect_dist + 10);
+                    t_step = t_step > 2 ? 2 : t_step;
+                    t_step *= 0.75 + 0.5 * rand();
+                }
                 reflect_coord = view_coord + (t + t_step) * direction;
                 if (reflect_coord.z > 0) {
                     t_oc = 0;
@@ -195,7 +200,7 @@ void main() {
                 screen_coord = view_coord_to_screen_coord(reflect_coord);
                 dist = texture2D(gdepth, screen_coord.st).y;
                 if (screen_coord.s < 0 || screen_coord.s > 1 || screen_coord.t < 0 || screen_coord.t > 1) {dist = 9999; break;}
-                if (is_water_in == 1 && reflect_dist > 50) break;
+                if (i == SSR_STEP_MAX_ITER - 1) {i++; break;}
                 if (flag == 1 && reflect_dist > dist) {
                     l = 0;
                     h = t_step;
@@ -229,8 +234,9 @@ void main() {
             }
             if (flag == 0)
                 t_oc += (t - t_in);
-            else if (i == SSR_STEP_MAX_ITER && k / reflect_dist < 1e-3) {
-                dist_n = texture2D(gdepth, screen_coord.st).x / far;
+            else if (i == SSR_STEP_MAX_ITER) {
+                dist = texture2D(gdepth, screen_coord.st).x;
+                dist_n = dist / far;
                 reflect_color = texture2D(gcolor, screen_coord.st).rgb;
                 i = 0;
             }
@@ -239,7 +245,7 @@ void main() {
                     reflect_color = mix(reflect_color, fog_color, clamp(pow(dist_n, 4), 0, 1));
             }
             else
-                reflect_color = mix(water_color, reflect_color, 1 / (1 + WATER_DECAY * length(reflect_coord - view_coord)));
+                reflect_color = mix(water_color, reflect_color, 1 / (1 + WATER_DECAY * dist));
             reflect_color = mix(t_oc > 5 ? mix(vec3(0.0), fog_color, clamp(pow(dist_n_in, 4), 0, 1)) : isEyeInWater == 0 ? sky_color : water_color, reflect_color,
                 smoothstep(0, 0.01, 1 - (float(i) / SSR_STEP_MAX_ITER)) *
                 smoothstep(0, 0.01, screen_coord.s) *
