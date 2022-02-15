@@ -9,6 +9,9 @@
 #define SSR_F0 0.04
 #define SSR_ETA 1.05
 
+#define AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01 0.02 0.05]
+#define FOG_THICKNESS 256
+
 #define WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
 #define WATER_COLOR pow(vec3(0.0000, 0.1356, 0.2405), vec3(GAMMA))
 
@@ -86,6 +89,17 @@ vec2 nearest(vec2 texcoord) {
     return vec2((floor(texcoord.s * viewWidth) + 0.5) / viewWidth, (floor(texcoord.t * viewHeight) + 0.5) / viewHeight);
 }
 
+float fog(float dist, float decay) {
+    dist -= 1;
+    dist = dist < 0 ? 0 : dist;
+    dist = dist * decay / 16 + 1;
+    dist = dist * dist;
+    dist = dist * dist;
+    dist = dist * dist;
+    dist = dist * dist;
+    return 1 / dist;
+}
+
 /* DRAWBUFFERS: 03 */
 void main() {
     vec4 color_data = texture2D(gcolor, texcoord);
@@ -96,9 +110,7 @@ void main() {
     float depth1 = texture2D(depthtex0, texcoord).x;
     vec4 dist_data = texture2D(gdepth, texcoord);
     float dist0 = dist_data.x;
-    float dist0_n = dist0 / far;
     float dist1 = dist_data.y;
-    float dist1_n = dist1 / far;
     vec3 screen_coord = vec3(texcoord, depth0);
     vec3 view_coord = screen_coord_to_view_coord(screen_coord);
     vec4 data = texture2D(gaux1, texcoord);
@@ -116,12 +128,13 @@ void main() {
     /* FOG */
     vec3 fog_color = pow(fogColor, vec3(GAMMA));
     fog_color *= clamp(sky_brightness / 2, 1, 100);
-    if (block_id1 < 1.5 && block_id0 > 0.5) color = mix(color, fog_color, clamp(pow(dist1_n, 4), 0, 1));
+    if (block_id1 < 1.5 && block_id0 > 0.5) color = mix(fog_color, color, fog(dist1, AIR_DECAY));
+    if (block_id1 < 0.5 && block_id0 < 0.5) color = mix(fog_color, color, fog(FOG_THICKNESS, AIR_DECAY));
 
     int is_water_out = (isEyeInWater == 0 && block_id1 > 1.5) ? 1 : 0;
     int is_water_in = (isEyeInWater == 1) ? 1 : 0;
     if (block_id1 > 0.5 || is_water_in == 1) {
-        vec3 sky_color = pow(skyColor, vec3(GAMMA)) * lumi_data.w;
+        vec3 sky_color = mix(fog_color, pow(skyColor, vec3(GAMMA)) * lumi_data.w, fog(FOG_THICKNESS, AIR_DECAY));
         vec3 water_color = WATER_COLOR * sky_brightness * lumi_data.w;
         vec3 direction;
 
@@ -137,7 +150,7 @@ void main() {
                 d0T * wave(dot(d0, world_coord.xz)) + d1T * wave(dot(d1, world_coord.xz)),
             0);
             vec3 old_normal = normal;
-            normal += offset;
+            normal += 3 * offset;
             normal = normalize(normal);
             direction = reflect(normalize(view_coord), normal);
             if (dot(direction, old_normal) < 0) direction = normalize(direction - 2 * dot(direction, old_normal) * old_normal);
@@ -162,14 +175,14 @@ void main() {
         }
 
         if (is_water_out == 1) {
-            color = mix(water_color, color, 1 / (1 + WATER_DECAY * water_depth));
-            color = mix(color, fog_color, clamp(pow(dist0_n, 4), 0, 1));   // FOG
+            color = mix(water_color, color, fog(water_depth, WATER_DECAY));
+            color = mix(fog_color, color, fog(dist0, AIR_DECAY));   // FOG
         }
 
         /* SSR */
         if (isEyeInWater == 0 && block_id1 > 0.5 || isEyeInWater == 1 && block_id1 > 1.5) {
             seed(texcoord);
-            float t = 0, t_oc = 0, t_step, t_in, k, k_in, l, h, dist, dist_n_in, dist_n, reflect_dist, f_r;
+            float t = 0, t_oc = 0, t_step, t_in, k, k_in, l, h, dist, dist_in, reflect_dist, f_r;
             if (isEyeInWater == 0) f_r = 1 - dot(direction, normal);
             else {
                 float sin_t = SSR_ETA * length(cross(direction, normal));
@@ -214,14 +227,13 @@ void main() {
                         else l = t_step;
                     }
                     if (reflect_dist > dist - 1e-2 && reflect_dist < dist + 1e-2 && abs(dist - texture2D(gdepth, nearest(screen_coord.st)).y) < 1) {
-                        dist_n = dist / far;
                         reflect_color = texture2D(gcolor, screen_coord.st).rgb;
                         t_oc = 0;
                         break;
                     }
                     else {
                         flag = 0;
-                        dist_n_in = reflect_dist / far;
+                        dist_in = reflect_dist;
                         t_in = t + t_step;
                         k_in = k;
                     }
@@ -236,17 +248,18 @@ void main() {
                 t_oc += (t - t_in);
             else if (i == SSR_STEP_MAX_ITER) {
                 dist = texture2D(gdepth, screen_coord.st).x;
-                dist_n = dist / far;
                 reflect_color = texture2D(gcolor, screen_coord.st).rgb;
                 i = 0;
             }
             if (isEyeInWater == 0) {    // FOG
                 if (texture2D(gnormal, screen_coord.st).w > 0.5)
-                    reflect_color = mix(reflect_color, fog_color, clamp(pow(dist_n, 4), 0, 1));
+                    reflect_color = mix(fog_color, reflect_color, fog(dist, AIR_DECAY));
+                else
+                    reflect_color = mix(fog_color, reflect_color, fog(FOG_THICKNESS, AIR_DECAY));
             }
             else
-                reflect_color = mix(water_color, reflect_color, 1 / (1 + WATER_DECAY * dist));
-            reflect_color = mix(t_oc > 5 ? mix(vec3(0.0), fog_color, clamp(pow(dist_n_in, 4), 0, 1)) : isEyeInWater == 0 ? sky_color : water_color, reflect_color,
+                reflect_color = mix(water_color, reflect_color, fog(length(reflect_coord - view_coord), WATER_DECAY));
+            reflect_color = mix(t_oc > 5 ? mix(fog_color, vec3(0.0), fog(dist_in, AIR_DECAY)) : isEyeInWater == 0 ? sky_color : water_color, reflect_color,
                 smoothstep(0, 0.01, 1 - (float(i) / SSR_STEP_MAX_ITER)) *
                 smoothstep(0, 0.01, screen_coord.s) *
                 smoothstep(0, 0.01, 1 - screen_coord.s) *
@@ -254,7 +267,7 @@ void main() {
                 smoothstep(0, 0.01, 1 - screen_coord.t));
             /* TRANSLUCENT */
             translucent = pow(translucent, vec3(GAMMA));
-            translucent = mix(translucent, fog_color * (1 - alpha), clamp(pow(dist0_n, 4), 0, 1));   // FOG
+            translucent = mix(fog_color * (1 - alpha), translucent, fog(dist0, AIR_DECAY));   // FOG
             color = color * alpha + translucent;
             color = (1 - f_r) * color + f_r * reflect_color;
         }
@@ -264,7 +277,7 @@ void main() {
             water_depth = water_depth < 0 ? 0 : water_depth;
             lumi_data.w = eyeBrightnessSmooth.y / 480. + 0.5;
             water_color = WATER_COLOR * sky_brightness * lumi_data.w;
-            color = mix(water_color, color, 1 / (1 + WATER_DECAY * water_depth));
+            color = mix(water_color, color, fog(water_depth, WATER_DECAY));
         }
     }
 
