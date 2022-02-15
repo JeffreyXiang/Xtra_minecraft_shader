@@ -79,7 +79,7 @@ void main() {
         laplacian = smoothstep(0.1, 0.2, abs(laplacian));
 
         if (isEyeInWater == 1) 
-            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, 1 / (1 + WATER_DECAY * dist)), 0, 100);
+            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * WATER_DECAY)), 0, 100);
         else
             color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * AIR_DECAY)), 0, 100);
     }

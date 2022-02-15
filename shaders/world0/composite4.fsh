@@ -175,7 +175,7 @@ void main() {
         }
 
         if (is_water_out == 1) {
-            color = mix(water_color, color, 1 / (1 + WATER_DECAY * water_depth));
+            color = mix(water_color, color, fog(water_depth, WATER_DECAY));
             color = mix(fog_color, color, fog(dist0, AIR_DECAY));   // FOG
         }
 
@@ -253,7 +253,7 @@ void main() {
                     reflect_color = mix(fog_color, reflect_color, fog(FOG_THICKNESS, AIR_DECAY));
             }
             else
-                reflect_color = mix(water_color, reflect_color, 1 / (1 + WATER_DECAY * length(reflect_coord - view_coord)));
+                reflect_color = mix(water_color, reflect_color, fog(length(reflect_coord - view_coord), WATER_DECAY));
             reflect_color = mix(t_oc > 5 ? mix(fog_color, vec3(0.0), fog(dist_in, AIR_DECAY)) : isEyeInWater == 0 ? sky_color : water_color, reflect_color,
                 smoothstep(0, 0.01, 1 - (float(i) / SSR_STEP_MAX_ITER)) *
                 smoothstep(0, 0.01, screen_coord.s) *
@@ -272,7 +272,7 @@ void main() {
             water_depth = water_depth < 0 ? 0 : water_depth;
             lumi_data.w = eyeBrightnessSmooth.y / 480. + 0.5;
             water_color = WATER_COLOR * sky_brightness * lumi_data.w;
-            color = mix(water_color, color, 1 / (1 + WATER_DECAY * water_depth));
+            color = mix(water_color, color, fog(water_depth, WATER_DECAY));
         }
     }
 

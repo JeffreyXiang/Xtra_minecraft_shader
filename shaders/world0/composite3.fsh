@@ -101,6 +101,17 @@ vec3 world_coord_to_shadow_coord(vec3 world_coord) {
     return shadow_screen_coord;
 }
 
+float fog(float dist, float decay) {
+    dist -= 1;
+    dist = dist < 0 ? 0 : dist;
+    dist = dist * decay / 16 + 1;
+    dist = dist * dist;
+    dist = dist * dist;
+    dist = dist * dist;
+    dist = dist * dist;
+    return 1 / dist;
+}
+
 /* DRAWBUFFERS: 0 */
 void main() {
     vec4 color_data = texture2D(gcolor, texcoord);
@@ -156,9 +167,9 @@ void main() {
     if (isEyeInWater == 0 && block_id1 > 1.5 || isEyeInWater == 1 && block_id1 < 1.5) {
         float shadow_water_dist = -((current_depth - texture2D(shadowtex0, shadow_texcoord).x) * 2 - 1 - shadowProjection[3][2]) / shadowProjection[2][2];
         shadow_water_dist = shadow_water_dist < 0 ? 0 : shadow_water_dist;
-        float k = 1 + SKYLIGHT_WATER_DECAY * shadow_water_dist;
-        sky_light /= k;
-        sunmoon_light /= k;
+        float k = fog(shadow_water_dist, SKYLIGHT_WATER_DECAY);
+        sky_light *= k;
+        sunmoon_light *= k;
     } 
 
     if (block_id0 > 0.5) {
