@@ -7,6 +7,8 @@
 #define OUTLINE_ENABLE 1 // [0 1]
 #define OUTLINE_WIDTH 1
 
+#define AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01]
+
 #define WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
 
 uniform sampler2D gcolor;
@@ -27,6 +29,16 @@ vec2 offset(vec2 ori) {
     return vec2(ori.x * OUTLINE_WIDTH / viewWidth, ori.y * OUTLINE_WIDTH / viewHeight);
 }
 
+float fog(float dist, float decay) {
+    dist = dist < 0 ? 0 : dist;
+    dist = dist * decay / 16 + 1;
+    dist = dist * dist;
+    dist = dist * dist;
+    dist = dist * dist;
+    dist = dist * dist;
+    return 1 / dist;
+}
+
 /* DRAWBUFFERS: 0 */
 void main() {
     vec3 color = texture2D(gcolor, texcoord).rgb;
@@ -44,8 +56,7 @@ void main() {
 
 #if OUTLINE_ENABLE
     float dist = texture2D(gdepth, texcoord).x;
-    float dist_n = dist / far;
-    if (dist_n < 1) {
+    if (dist < far) {
         /* OUTLINE */
         float depth00 = log(texture2D(gdepth, texcoord + offset(vec2(-1, -1))).x);
         float depth01 = log(texture2D(gdepth, texcoord + offset(vec2(0, -1))).x);
@@ -70,7 +81,7 @@ void main() {
         if (isEyeInWater == 1) 
             color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, 1 / (1 + WATER_DECAY * dist)), 0, 100);
         else
-            color = clamp(color - mix(0.5 * laplacian * color + 0.1 * laplacian, vec3(0.0), dist_n), 0, 100);
+            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * AIR_DECAY)), 0, 100);
     }
 #endif
 
