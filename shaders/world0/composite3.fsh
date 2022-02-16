@@ -46,7 +46,7 @@
 
 #define SSAO_ENABLE 1 // [0 1]
 
-#define SKYLIGHT_WATER_DECAY 1
+#define WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
@@ -102,7 +102,6 @@ vec3 world_coord_to_shadow_coord(vec3 world_coord) {
 }
 
 float fog(float dist, float decay) {
-    dist -= 1;
     dist = dist < 0 ? 0 : dist;
     dist = dist * decay / 16 + 1;
     dist = dist * dist;
@@ -167,7 +166,7 @@ void main() {
     if (isEyeInWater == 0 && block_id1 > 1.5 || isEyeInWater == 1 && block_id1 < 1.5) {
         float shadow_water_dist = -((current_depth - texture2D(shadowtex0, shadow_texcoord).x) * 2 - 1 - shadowProjection[3][2]) / shadowProjection[2][2];
         shadow_water_dist = shadow_water_dist < 0 ? 0 : shadow_water_dist;
-        float k = fog(shadow_water_dist, SKYLIGHT_WATER_DECAY);
+        float k = fog(shadow_water_dist, WATER_DECAY);
         sky_light *= k;
         sunmoon_light *= k;
     } 

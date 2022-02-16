@@ -16,6 +16,7 @@ const int RGB16F = 0;
 const int gcolorFormat = RGBA16F;
 const int gnormalFormat = RGBA16F;
 const int gdepthFormat = RGBA32F;
+const int compositeFormat = RGBA16F;
 const int gaux1Format = RGBA16F;
 const int gaux2Format = RGBA16F;
 const int gaux3Format = RGBA16F;
@@ -25,6 +26,7 @@ const float	sunPathRotation	= -30.0;
 
 uniform sampler2D gcolor;
 uniform sampler2D gnormal;
+uniform sampler2D composite;
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 uniform sampler2D gaux1;
@@ -76,9 +78,10 @@ vec3 view_coord_to_screen_coord(vec3 view_coord) {
     return screen_coord;
 }
 
-/* DRAWBUFFERS: 0145 */
+/* DRAWBUFFERS: 01345 */
 void main() {
     vec3 color = texture2D(gcolor, texcoord).rgb;
+    vec3 translucent = texture2D(composite, texcoord).rgb;
     float depth0 = texture2D(depthtex0, texcoord).x;
     float depth1 = texture2D(depthtex1, texcoord).x;
     vec4 normal_data0 = texture2D(gnormal, texcoord);
@@ -110,6 +113,7 @@ void main() {
     
     /* INVERSE GAMMA */
     color = pow(color, vec3(GAMMA));
+    translucent = pow(translucent, vec3(GAMMA));
 
 #if SSAO_ENABLE
     /* SSAO */
@@ -138,6 +142,7 @@ void main() {
     
     gl_FragData[0] = vec4(color, alpha);
     gl_FragData[1] = vec4(dist0, dist1, 0.0, 0.0);
-    gl_FragData[2] = normal_data1;
-    gl_FragData[3] = lumi_data;
+    gl_FragData[2] = vec4(translucent, 1.0);
+    gl_FragData[3] = normal_data1;
+    gl_FragData[4] = lumi_data;
 }
