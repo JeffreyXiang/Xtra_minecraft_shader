@@ -3,6 +3,7 @@
 #define MIPMAP_LEVEL 4
 
 uniform sampler2D gcolor;
+uniform sampler2D gdepth;
 uniform sampler2D composite;
 uniform sampler2D gaux3;
 uniform sampler2D gaux4;
@@ -12,9 +13,10 @@ const bool gaux4MipmapEnabled = true;
 
 varying vec2 texcoord;
 
-/* DRAWBUFFERS: 0367 */
+/* DRAWBUFFERS: 01367 */
 void main() {
     vec4 color = vec4(texture2D(gcolor, texcoord).rgb, 0.0);
+    vec4 dist_data = texture2D(gdepth, texcoord);
     vec4 translucent = texture2D(composite, texcoord);
     vec4 fog_data0 = vec4(0.0);
     vec4 fog_data1 = vec4(0.0);
@@ -27,11 +29,12 @@ void main() {
     fog_decay0 = (1 - fog_decay0) * (1 - fog_decay0);
     fog_decay1 = (1 - fog_decay1) * (1 - fog_decay1);
     if (fog_decay0 < 1. / (MIPMAP_LEVEL - 1)) {
-        translucent.rgb += fog_data0.rgb * (1 - fog_decay0 * (MIPMAP_LEVEL - 1));
+        dist_data.z = 1 - fog_decay0 * (MIPMAP_LEVEL - 1);
+        translucent.rgb += fog_data0.rgb * dist_data.z;
     }
     if (fog_decay1 < 1. / (MIPMAP_LEVEL - 1)) {
-        color.w = 1 - fog_decay1 * (MIPMAP_LEVEL - 1);
-        color.rgb += fog_data1.rgb * color.w;
+        dist_data.w = 1 - fog_decay1 * (MIPMAP_LEVEL - 1);
+        color.rgb += fog_data1.rgb * dist_data.w;
     }
 
     fog_data0 = vec4(0.0);
@@ -67,7 +70,8 @@ void main() {
     }
 
     gl_FragData[0] = color;
-    gl_FragData[1] = translucent;
-    gl_FragData[2] = fog_data0;
-    gl_FragData[3] = fog_data1;
+    gl_FragData[1] = dist_data;
+    gl_FragData[2] = translucent;
+    gl_FragData[3] = fog_data0;
+    gl_FragData[4] = fog_data1;
 }

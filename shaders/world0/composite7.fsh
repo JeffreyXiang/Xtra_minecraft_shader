@@ -4,6 +4,7 @@
 #define MIPMAP_LEVEL 4
 
 uniform sampler2D gcolor;
+uniform sampler2D gdepth;
 uniform sampler2D gnormal;
 uniform sampler2D composite;
 uniform sampler2D gaux3;
@@ -18,7 +19,9 @@ varying vec2 texcoord;
 void main() {
     vec4 color_data = texture2D(gcolor, texcoord);
     vec3 color = color_data.rgb;
-    float k0 = color_data.a;
+    vec4 dist_data = texture2D(gdepth, texcoord);
+    float k0 = dist_data.z;
+    float k1 = dist_data.w;
     vec4 translucent_data = texture2D(composite, texcoord);
     vec3 translucent = translucent_data.rgb;
     float alpha = translucent_data.a;
@@ -36,10 +39,13 @@ void main() {
         color_data = texture2D(gaux4, texcoord * s + vec2(1 - 2 * s, mod(i, 2) == 0 ? 0 : 0.75));
         fog_scatter0 = mix(fog_scatter0, vec3(0.0), color_data.a);
         fog_scatter1 = mix(fog_scatter1, color_data.rgb, color_data.a);
+        alpha_scatter = mix(alpha_scatter, 0.0, color_data.a);
         s *= 2;
     }
-    fog_scatter0 = mix(fog_scatter0, vec3(0.0), k0);
-    fog_scatter1 = mix(fog_scatter1, vec3(0.0), k0);
+    fog_scatter0 = mix(fog_scatter0, vec3(0.0), k1);
+    fog_scatter1 = mix(fog_scatter1, vec3(0.0), k1);
+    alpha_scatter = mix(alpha_scatter, 0.0, k1);
+    alpha_scatter += alpha * k0;
 
     color = color * (1 - alpha) + fog_scatter1 * (1 - alpha_scatter) + translucent + fog_scatter0;
 

@@ -240,7 +240,7 @@ void main() {
             translucent = translucent * k2;
             fog_scatter0 = k2 * (2 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * fog_color;
             fog_scatter1 = k2 * (2 - k2) * fog_scatter1 + (1 - k2) * (1 - k2) * fog_color;
-            fog_decay0 = k2;
+            fog_decay0 = k1 * k2;
             fog_decay1 = k1 * k2;
         } 
     }
@@ -271,7 +271,7 @@ void main() {
             translucent = translucent * k2;
             fog_scatter0 = k2 * (2 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * water_color;
             fog_scatter1 = k2 * (2 - k2) * fog_scatter1 + (1 - k2) * (1 - k2) * water_color;
-            fog_decay0 = k2;
+            fog_decay0 = k1 * k2;
             fog_decay1 = k1 * k2;
         } 
     }
