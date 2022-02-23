@@ -46,11 +46,15 @@
 
 #define SSAO_ENABLE 1 // [0 1]
 
-#define WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
+#define FOG_AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01 0.02 0.05]
+#define FOG_THICKNESS 256
+#define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
+#define FOG_WATER_COLOR pow(vec3(0.0000, 0.1356, 0.2405), vec3(GAMMA))
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
 uniform sampler2D gnormal;
+uniform sampler2D composite;
 uniform sampler2D gaux1;
 uniform sampler2D gaux2;
 uniform sampler2D depthtex1;
@@ -60,6 +64,9 @@ uniform sampler2D shadowtex1;
 uniform float far;
 uniform vec3 shadowLightPosition;
 uniform float sunAngle;
+uniform vec3 fogColor;
+uniform vec3 skyColor;
+uniform ivec2 eyeBrightnessSmooth;
 uniform int isEyeInWater;
 
 uniform mat4 gbufferModelView;
@@ -111,12 +118,20 @@ float fog(float dist, float decay) {
     return 1 / dist;
 }
 
-/* DRAWBUFFERS: 0 */
+float grayscale(vec3 color) {
+    return color.r * 0.299 + color.g * 0.587 + color.b * 0.114;
+}
+
+/* DRAWBUFFERS: 03678 */
 void main() {
-    vec4 color_data = texture2D(gcolor, texcoord);
-    vec3 color = color_data.rgb;
-    float alpha = color_data.a;
+    vec3 color = texture2D(gcolor, texcoord).rgb;
+    vec4 translucent_data = texture2D(composite, texcoord);
+    vec3 translucent = translucent_data.rgb;
+    float alpha = translucent_data.a;
     float depth1 = texture2D(depthtex1, texcoord).x;
+    vec4 dist_data = texture2D(gdepth, texcoord);
+    float dist0 = dist_data.x;
+    float dist1 = dist_data.y;
     vec4 normal_data0 = texture2D(gnormal, texcoord);
     vec3 normal0 = normal_data0.xyz;
     float block_id0 = normal_data0.w;
@@ -166,9 +181,8 @@ void main() {
     if (isEyeInWater == 0 && block_id1 > 1.5 || isEyeInWater == 1 && block_id1 < 1.5) {
         float shadow_water_dist = -((current_depth - texture2D(shadowtex0, shadow_texcoord).x) * 2 - 1 - shadowProjection[3][2]) / shadowProjection[2][2];
         shadow_water_dist = shadow_water_dist < 0 ? 0 : shadow_water_dist;
-        float k = fog(shadow_water_dist, WATER_DECAY);
-        sky_light *= k;
-        sunmoon_light *= k;
+        sky_light *= fog(shadow_water_dist * normalize(view_coord_to_world_coord(shadowLightPosition)).y, FOG_WATER_DECAY);
+        sunmoon_light *= fog(shadow_water_dist, FOG_WATER_DECAY);
     } 
 
     if (block_id0 > 0.5) {
@@ -180,8 +194,9 @@ void main() {
             vec3 block_light = BLOCK_ILLUMINATION_PHYSICAL_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * BLOCK_ILLUMINATION_COLOR;
         #endif
 
-        sky_light *= (in_shadow > 0.5 ? lumi_data.y : 1) * (1 - SHADOW_INTENSITY);
-        sunmoon_light *= (1 - sun_light_shadow) * SHADOW_INTENSITY;
+        float k = fog(FOG_THICKNESS, FOG_AIR_DECAY);
+        sky_light *= (in_shadow > 0.5 ? lumi_data.y : 1) * (1 - SHADOW_INTENSITY * k);
+        sunmoon_light *= (1 - sun_light_shadow) * SHADOW_INTENSITY * k;
         color *= block_light + sky_light + sunmoon_light + BASE_ILLUMINATION_INTENSITY;
         #if SSAO_ENABLE
             color *= lumi_data.z;   // SSAO
@@ -190,6 +205,90 @@ void main() {
     else {
         color *= clamp(sky_brightness / 2, 1, 100);
     }
-    
-    gl_FragData[0] = vec4(color, alpha);
+
+    /* FOG */
+    lumi_data.z = eyeBrightnessSmooth.y / 240.;
+    vec3 fog_color = pow(fogColor, vec3(GAMMA)) * lumi_data.z;
+    fog_color *= clamp(sky_brightness / 2, 1, 100);
+    vec3 sky_color = pow(skyColor, vec3(GAMMA)) * lumi_data.w;
+    float fog_decay0, fog_decay1;
+    vec3 fog_scatter0 = translucent, fog_scatter1 = color;
+    if (isEyeInWater == 0) {
+        vec3 water_color = FOG_WATER_COLOR * sky_brightness * lumi_data.w;
+        if (block_id1 < 1.5) {
+            float k1;
+            if (block_id0 > 0.5)
+                k1 = fog(dist1, FOG_AIR_DECAY);
+            else
+                k1 = fog(FOG_THICKNESS, FOG_AIR_DECAY);
+            float k2 = fog(dist0, FOG_AIR_DECAY);
+            color = color * k1;
+            translucent = translucent * k2;
+            fog_scatter0 = k2 * (1 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * fog_color;
+            fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * fog_color;
+            fog_decay0 = k2;
+            fog_decay1 = k1;
+        }
+        if (block_id1 > 1.5) {
+            float k1 = fog(dist1 - dist0, FOG_WATER_DECAY);
+            color = color * k1;
+            translucent = translucent * k1;
+            fog_scatter0 = k1 * (1 - k1) * fog_scatter0 + (1 - k1) * (1 - k1) * alpha * water_color;
+            fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * water_color;
+            float k2 = fog(dist0, FOG_AIR_DECAY);
+            color = color * k2;
+            translucent = translucent * k2;
+            fog_scatter0 = k2 * (2 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * fog_color;
+            fog_scatter1 = k2 * (2 - k2) * fog_scatter1 + (1 - k2) * (1 - k2) * fog_color;
+            fog_decay0 = k2;
+            fog_decay1 = k1 * k2;
+        } 
+    }
+    else if (isEyeInWater == 1) {
+        vec3 water_color = FOG_WATER_COLOR * sky_brightness * (0.5 * lumi_data.z + 0.5);
+        if (block_id1 < 1.5) {
+            float k1 = fog(dist1, FOG_WATER_DECAY);
+            float k2 = fog(dist0, FOG_WATER_DECAY);
+            color = color * k1;
+            translucent = translucent * k2;
+            fog_scatter0 = k2 * (1 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * water_color;
+            fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * water_color;
+            fog_decay0 = k2;
+            fog_decay1 = k1;
+        }
+        if (block_id1 > 1.5) {
+            float k1;
+            if (block_id0 > 0.5) 
+                k1 = fog(dist1 - dist0, FOG_AIR_DECAY);
+            else
+                k1 = fog(FOG_THICKNESS, FOG_AIR_DECAY);
+            color = color * k1;
+            translucent = translucent * k1;
+            fog_scatter0 = k1 * (1 - k1) * fog_scatter0 + (1 - k1) * (1 - k1) * alpha * sky_color;
+            fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * sky_color;
+            float k2 = fog(dist0, FOG_WATER_DECAY);
+            color = color * k2;
+            translucent = translucent * k2;
+            fog_scatter0 = k2 * (2 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * water_color;
+            fog_scatter1 = k2 * (2 - k2) * fog_scatter1 + (1 - k2) * (1 - k2) * water_color;
+            fog_decay0 = k2;
+            fog_decay1 = k1 * k2;
+        } 
+    }
+
+    /* BLOOM EXTRACT */
+    vec3 bloom_color = color * (1 - alpha) * fog_decay1;
+    bloom_color = pow(bloom_color, vec3(1 / GAMMA));
+    if (block_id0 > 1.5) {
+        bloom_color = mix(vec3(0.0), bloom_color, smoothstep(0.4, 0.6, grayscale(bloom_color)));
+    }
+    else {
+        bloom_color = 0.5 * mix(vec3(0.0), bloom_color, smoothstep(1.5, 2, grayscale(bloom_color)));
+    }
+
+    gl_FragData[0] = vec4(color, 1.0);
+    gl_FragData[1] = vec4(translucent, alpha);
+    gl_FragData[2] = vec4(fog_scatter0, fog_decay0);
+    gl_FragData[3] = vec4(fog_scatter1, fog_decay1);
+    gl_FragData[4] = vec4(bloom_color, 1.0);
 }

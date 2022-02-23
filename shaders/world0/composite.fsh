@@ -8,7 +8,6 @@
 #define SSAO_SAMPLE_NUM 32   //[4 8 16 32 64 128 256]
 #define SSAO_SAMPLE_RADIUS 0.25   //[0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5]
 #define SSAO_INTENSITY 1.0   //[0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0]
-#define SSAO_EPSILON 1e-4
 
 const int RGBA16F = 0;
 const int RGBA32F = 0;
@@ -54,12 +53,12 @@ float state;
 void seed(vec2 screenCoord)
 {
 	state = screenCoord.x * 12.9898 + screenCoord.y * 78.223;
-    state *= (1 + fract(sin(state + frameTimeCounter) * 43758.5453));
+    // state *= (1 + fract(sin(state + frameTimeCounter) * 43758.5453));
 }
 
 float rand(){
     float val = fract(sin(state) * 43758.5453);
-    state = val * 38.287 + 4.3783;
+    state = fract(state) * 38.287;
     return val;
 }
 //----------------------------------------
@@ -89,12 +88,13 @@ void main() {
     float block_id0 = normal_data0.w;
     vec4 normal_data1 = texture2D(gaux1, texcoord);
     vec4 lumi_data = texture2D(gaux2, texcoord);
-    float alpha = 1 - texture2D(gaux3, texcoord).x;
+    float alpha = texture2D(gaux3, texcoord).x;
     vec4 translucent_data = texture2D(gaux4, texcoord);
     float block_id1 = translucent_data.x;
     normal_data1.w = block_id1;
     if (block_id1 > 0.5)  lumi_data.w = translucent_data.y;
     else lumi_data.w = lumi_data.y;
+    lumi_data.z = 1;
 
     float dist0 = 9999;
     float dist1 = 9999;
@@ -117,32 +117,35 @@ void main() {
 
 #if SSAO_ENABLE
     /* SSAO */
-    if (block_id0 > 0.5) {
+    if (block_id0 > 0.5 && dist1 < 64) {
         seed(texcoord);
-        float ao = 1, ssao_sample_depth;
+        float ao = 1, ssao_sample_depth, y, xz, theta, r;
         vec3 ssao_sample, tangent, bitangent;
         int oc = 0, sum = 0;
         for (int i = 0; i < SSAO_SAMPLE_NUM; i++) {
-            ssao_sample = vec3(rand() * 2 - 1, rand(), rand() * 2 - 1);
-            if (length(ssao_sample) < 1) {
-                tangent = normalize(cross(normal0, normal0.y < 0.707 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
-                bitangent = cross(normal0, tangent);
-                ssao_sample = SSAO_SAMPLE_RADIUS * (ssao_sample.x * bitangent + ssao_sample.y * normal0 + ssao_sample.z * tangent);
-                ssao_sample += view_coord;
-                ssao_sample = view_coord_to_screen_coord(ssao_sample);
-                sum++;
-                ssao_sample_depth = texture2D(depthtex1, ssao_sample.st).x;
-                if (ssao_sample.z - SSAO_EPSILON > ssao_sample_depth && ssao_sample.z - 0.001 < ssao_sample_depth) oc++;
-            }
+            y = rand();
+            xz = sqrt(1 - y * y);
+            theta = 2 * PI * rand();
+            r = rand();
+            r = r * SSAO_SAMPLE_RADIUS;
+            ssao_sample = r * vec3(xz * cos(theta), y, xz * sin(theta));
+            tangent = normalize(cross(normal0, normal0.y < 0.707 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
+            bitangent = cross(normal0, tangent);
+            ssao_sample = SSAO_SAMPLE_RADIUS * (ssao_sample.x * bitangent + ssao_sample.y * normal0 + ssao_sample.z * tangent);
+            ssao_sample += view_coord;
+            ssao_sample = view_coord_to_screen_coord(ssao_sample);
+            sum++;
+            ssao_sample_depth = texture2D(depthtex1, ssao_sample.st).x;
+            if (ssao_sample.z > ssao_sample_depth && ssao_sample.z - 0.001 < ssao_sample_depth) oc++;
         }
-        if (sum > 0) ao = 1 - SSAO_INTENSITY * oc / sum;
+        if (sum > 0) ao = 1 - SSAO_INTENSITY * oc / sum * (1 - smoothstep(32, 64, dist1));
         lumi_data.z = clamp(ao, 0, 1);
     }
 #endif
     
-    gl_FragData[0] = vec4(color, alpha);
+    gl_FragData[0] = vec4(color, 1.0);
     gl_FragData[1] = vec4(dist0, dist1, 0.0, 0.0);
-    gl_FragData[2] = vec4(translucent, 1.0);
+    gl_FragData[2] = vec4(translucent, alpha);
     gl_FragData[3] = normal_data1;
     gl_FragData[4] = lumi_data;
 }

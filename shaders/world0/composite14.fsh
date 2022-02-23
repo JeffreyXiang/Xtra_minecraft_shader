@@ -13,7 +13,7 @@
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
-uniform sampler2D composite;
+uniform sampler2D colortex8;
 
 uniform ivec2 eyeBrightnessSmooth;
 uniform float sunAngle;
@@ -90,7 +90,7 @@ void main() {
     float s = 1;
     for (int i = 2; i < 8; i++) {
         s *= 0.5;
-        bloom += texture2D(composite, texcoord * s + 1 - 2 * s + offset(vec2(0.5, 0))).rgb / (64 * s);
+        bloom += texture2D(colortex8, texcoord * s + vec2(1 - 2 * s, mod(i, 2) == 0 ? 0 : 0.75) + offset(vec2(0.5, 0))).rgb / (64 * s);
     }
     color += bloom;
     
