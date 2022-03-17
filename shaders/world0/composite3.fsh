@@ -10,34 +10,8 @@
 
 #define ILLUMINATION_EPSILON 0.5
 #define ILLUMINATION_MODE 0     // [0 1]
-#define BLOCK_ILLUMINATION_COLOR_TEMPERATURE 4400   // [2400 2800 3200 3600 4000 4400 4800 5200 5600 6000 6400 6800 7200]
-#if BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 2400
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.3364, 0.0501), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 2800
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.4195, 0.1119), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 3200
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.4970, 0.1879), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 3600
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.5689, 0.2745), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 4000
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.6354, 0.3684), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 4400
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.6966, 0.4668), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 4800
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.7528, 0.5675), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 5200
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.8044, 0.6685), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 5600
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.8518, 0.7686), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 6000
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.8952, 0.8666), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 6400
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(1.0000, 0.9351, 0.9616), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 6800
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(0.9488, 0.9219, 1.0501), vec3(GAMMA))
-#elif BLOCK_ILLUMINATION_COLOR_TEMPERATURE == 7200
-    #define BLOCK_ILLUMINATION_COLOR pow(vec3(0.8753, 0.8799, 1.0501), vec3(GAMMA))
-#endif
+#define BLOCK_ILLUMINATION_COLOR_TEMPERATURE 4400   // [1000 1100 1200 1300 1400 1500 1600 1700 1800 1900 2000 2100 2200 2300 2400 2500 2600 2700 2800 2900 3000 3100 3200 3300 3400 3500 3600 3700 3800 3900 4000 4100 4200 4300 4400 4500 4600 4700 4800 4900 5000 5100 5200 5300 5400 5500 5600 5700 5800 5900 6000 6100 6200 6300 6400 6500 6600 6700 6800 6900 7000 7100 7200 7300 7400 7500 7600 7700 7800 7900 8000 8100 8200 8300 8400 8500 8600 8700 8800 8900 9000 9100 9200 9300 9400 9500 9600 9700 9800 9900 10000]
+
 #define BLOCK_ILLUMINATION_CLASSIC_INTENSITY 1.5    //[0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5]
 #define BLOCK_ILLUMINATION_PHYSICAL_INTENSITY 3.0   //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
 #define BLOCK_ILLUMINATION_PHYSICAL_CLOSEST 0.5    //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
@@ -49,7 +23,6 @@
 #define FOG_AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01 0.02 0.05]
 #define FOG_THICKNESS 256
 #define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
-#define FOG_WATER_COLOR pow(vec3(0.0000, 0.1356, 0.2405), vec3(GAMMA))
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
@@ -57,6 +30,7 @@ uniform sampler2D gnormal;
 uniform sampler2D composite;
 uniform sampler2D gaux1;
 uniform sampler2D gaux2;
+uniform sampler2D colortex15;
 uniform sampler2D depthtex1;
 uniform sampler2D shadowtex0;
 uniform sampler2D shadowtex1;
@@ -118,8 +92,24 @@ float fog(float dist, float decay) {
     return 1 / dist;
 }
 
+float fog_blend(float k1, float k2, float decay) {
+    return mix(k1, k2, 0.5 * sqrt(decay));
+}
+
 float grayscale(vec3 color) {
     return color.r * 0.299 + color.g * 0.587 + color.b * 0.114;
+}
+
+vec3 LUT_color_temperature(float temp) {
+    return texture2D(colortex15, vec2((0.5 + (temp - 1000) / 9000 * 90) / 256, 0.5 / 256)).rgb;
+}
+
+vec3 LUT_water_absorption(float decay) {
+    return texture2D(colortex15, vec2(1 - decay, 1.5 / 256)).rgb;
+}
+
+vec3 LUT_water_scattering(float decay) {
+    return texture2D(colortex15, vec2(1 - decay, 2.5 / 256)).rgb;
 }
 
 /* DRAWBUFFERS: 03678 */
@@ -137,6 +127,7 @@ void main() {
     float block_id0 = normal_data0.w;
     float block_id1 = texture2D(gaux1, texcoord).w;
     vec4 lumi_data = texture2D(gaux2, texcoord);
+    vec3 block_illumination_color = LUT_color_temperature(BLOCK_ILLUMINATION_COLOR_TEMPERATURE);
 
     /* SHADOW */
     float sun_light_shadow = 0.0;
@@ -181,17 +172,19 @@ void main() {
     if (isEyeInWater == 0 && block_id1 > 1.5 || isEyeInWater == 1 && block_id1 < 1.5) {
         float shadow_water_dist = -((current_depth - texture2D(shadowtex0, shadow_texcoord).x) * 2 - 1 - shadowProjection[3][2]) / shadowProjection[2][2];
         shadow_water_dist = shadow_water_dist < 0 ? 0 : shadow_water_dist;
-        sky_light *= fog(shadow_water_dist * normalize(view_coord_to_world_coord(shadowLightPosition)).y, FOG_WATER_DECAY);
-        sunmoon_light *= fog(shadow_water_dist, FOG_WATER_DECAY);
+        float k = fog(shadow_water_dist * normalize(view_coord_to_world_coord(shadowLightPosition)).y, FOG_WATER_DECAY);
+        sky_light *= k * LUT_water_absorption(k);
+        k = fog(shadow_water_dist, FOG_WATER_DECAY);
+        sunmoon_light *= k * LUT_water_absorption(k);
     } 
 
     if (block_id0 > 0.5) {
         #if ILLUMINATION_MODE
-            vec3 block_light = BLOCK_ILLUMINATION_CLASSIC_INTENSITY * lumi_data.x * BLOCK_ILLUMINATION_COLOR;
+            vec3 block_light = BLOCK_ILLUMINATION_CLASSIC_INTENSITY * lumi_data.x * block_illumination_color;
         #else
             float block_light_dist = block_id0 > 1.5 ? 0 : 13 - clamp(15 * lumi_data.x - 1, 0, 13);
             block_light_dist = (1 - ILLUMINATION_EPSILON) * block_light_dist + ILLUMINATION_EPSILON * block_light_dist / (13 - block_light_dist) + BLOCK_ILLUMINATION_PHYSICAL_CLOSEST;
-            vec3 block_light = BLOCK_ILLUMINATION_PHYSICAL_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * BLOCK_ILLUMINATION_COLOR;
+            vec3 block_light = BLOCK_ILLUMINATION_PHYSICAL_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * block_illumination_color;
         #endif
 
         float k = fog(FOG_THICKNESS, FOG_AIR_DECAY);
@@ -214,7 +207,6 @@ void main() {
     float fog_decay0, fog_decay1;
     vec3 fog_scatter0 = translucent, fog_scatter1 = color;
     if (isEyeInWater == 0) {
-        vec3 water_color = FOG_WATER_COLOR * sky_brightness * lumi_data.w;
         if (block_id1 < 1.5) {
             float k1;
             if (block_id0 > 0.5)
@@ -233,6 +225,7 @@ void main() {
             float k1 = fog(dist1 - dist0, FOG_WATER_DECAY);
             color = color * k1;
             translucent = translucent * k1;
+            vec3 water_color = LUT_water_scattering(fog_blend(1, lumi_data.y, k1)) * sky_brightness / SKY_ILLUMINATION_INTENSITY * lumi_data.w;
             fog_scatter0 = k1 * (1 - k1) * fog_scatter0 + (1 - k1) * (1 - k1) * alpha * water_color;
             fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * water_color;
             float k2 = fog(dist0, FOG_AIR_DECAY);
@@ -245,14 +238,15 @@ void main() {
         } 
     }
     else if (isEyeInWater == 1) {
-        vec3 water_color = FOG_WATER_COLOR * sky_brightness * (0.5 * lumi_data.z + 0.5);
         if (block_id1 < 1.5) {
             float k1 = fog(dist1, FOG_WATER_DECAY);
             float k2 = fog(dist0, FOG_WATER_DECAY);
             color = color * k1;
             translucent = translucent * k2;
-            fog_scatter0 = k2 * (1 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * water_color;
-            fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * water_color;
+            vec3 water_color0 = LUT_water_scattering(fog_blend(lumi_data.z, lumi_data.y, k2)) * sky_brightness / SKY_ILLUMINATION_INTENSITY * (0.5 * lumi_data.z + 0.5);
+            vec3 water_color1 = LUT_water_scattering(fog_blend(lumi_data.z, lumi_data.y, k1)) * sky_brightness / SKY_ILLUMINATION_INTENSITY * (0.5 * lumi_data.z + 0.5);
+            fog_scatter0 = k2 * (1 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * water_color0;
+            fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * water_color1;
             fog_decay0 = k2;
             fog_decay1 = k1;
         }
@@ -269,6 +263,7 @@ void main() {
             float k2 = fog(dist0, FOG_WATER_DECAY);
             color = color * k2;
             translucent = translucent * k2;
+            vec3 water_color = LUT_water_scattering(fog_blend(lumi_data.z, lumi_data.w, k2)) * sky_brightness / SKY_ILLUMINATION_INTENSITY * (0.5 * lumi_data.z + 0.5);
             fog_scatter0 = k2 * (2 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * water_color;
             fog_scatter1 = k2 * (2 - k2) * fog_scatter1 + (1 - k2) * (1 - k2) * water_color;
             fog_decay0 = k1 * k2;
