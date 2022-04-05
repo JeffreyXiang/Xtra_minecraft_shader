@@ -24,7 +24,6 @@ ozone_absorption_base = np.array([0.650, 1.881, 0.085])
 def rayIntersectSphere(ro, rd, rad):
     b = np.dot(ro, rd)
     c = np.dot(ro, ro) - rad * rad
-    if c == 0: return 0.0
     if c > 0 and b > 0: return -1.0
     discr = b*b - c
     if discr < 0: return -1.0
