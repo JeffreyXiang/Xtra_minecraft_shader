@@ -20,6 +20,8 @@ const int gaux1Format = RGBA16F;
 const int gaux2Format = RGBA16F;
 const int gaux3Format = RGBA16F;
 const int gaux4Format = RGBA16F;
+const int colortex8Format = RGBA16F;
+const int colortex15Format = RGBA32F;
 const int shadowMapResolution = 4096;   //[1024 2048 4096] 
 const float	sunPathRotation	= -30.0;
 
