@@ -23,6 +23,13 @@ data[1, :water_absorption_data.shape[1]] = (water_absorption_data / 255.) ** (2.
 water_scattering_data = imageio.imread('./utils/water_scattering.png')
 data[2, :water_scattering_data.shape[1]] = (water_scattering_data / 255.) ** (2.2)
 
+'''ATMOSPHERE'''
+import atmosphere_taichi as atmo
+data[3:67, :, :3] = atmo.tLUT_np
+data[3:67, :, 3] = 1
+data[67:99, :32, :3] = atmo.msLUT_np
+data[67:99, :32, 3] = 1
+
 img = np.array(data)
 img = img * 255
 img = img.astype(np.uint8)

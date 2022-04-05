@@ -34,6 +34,7 @@ uniform sampler2D gaux1;
 uniform sampler2D gaux2;
 uniform sampler2D gaux3;
 uniform sampler2D gaux4;
+uniform sampler2D colortex15;
 
 uniform float frameTimeCounter;
 
@@ -46,6 +47,9 @@ uniform mat4 shadowModelView;
 uniform mat4 shadowModelViewInverse;
 uniform mat4 shadowProjection;
 uniform mat4 shadowProjectionInverse;
+
+uniform float viewWidth;
+uniform float viewHeight;
 
 varying vec2 texcoord;
 
@@ -79,7 +83,7 @@ vec3 view_coord_to_screen_coord(vec3 view_coord) {
     return screen_coord;
 }
 
-/* DRAWBUFFERS: 01345 */
+/* RENDERTARGETS: 0,1,3,4,5,15 */
 void main() {
     vec3 color = texture2D(gcolor, texcoord).rgb;
     vec3 translucent = texture2D(composite, texcoord).rgb;
@@ -144,10 +148,18 @@ void main() {
         lumi_data.z = clamp(ao, 0, 1);
     }
 #endif
+
+    /* LUTS */
+    vec4 LUT_data = vec4(0.0);
+    vec2 LUT_texcoord = vec2(texcoord.x / 256 * viewWidth, texcoord.y / 256 * viewHeight);
+    if (LUT_texcoord.x < 1 && LUT_texcoord.y < 1)
+        LUT_data = texture2D(colortex15, LUT_texcoord);
     
     gl_FragData[0] = vec4(color, 1.0);
     gl_FragData[1] = vec4(dist0, dist1, 0.0, 0.0);
     gl_FragData[2] = vec4(translucent, alpha);
     gl_FragData[3] = normal_data1;
     gl_FragData[4] = lumi_data;
+    gl_FragData[5] = LUT_data;
+;
 }

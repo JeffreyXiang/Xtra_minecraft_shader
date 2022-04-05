@@ -2,11 +2,16 @@
 
 #define MIPMAP_LEVEL 4
 
+#define GAUSSIAN_KERNEL_SIZE 9
+
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
 uniform sampler2D composite;
 uniform sampler2D gaux3;
 uniform sampler2D gaux4;
+
+uniform float viewWidth;
+uniform float viewHeight;
 
 const bool gaux3MipmapEnabled = true;
 const bool gaux4MipmapEnabled = true;
@@ -43,7 +48,8 @@ void main() {
     for (int i = 2; i <= MIPMAP_LEVEL; i++) {
         tex_coord = texcoord - vec2(1 - s, mod(i, 2) == 0 ? 0 : 0.75);
         s *= 0.5;
-        if (tex_coord.s > 0 && tex_coord.s < s && tex_coord.t > 0 && tex_coord.t < s) {
+        if (tex_coord.s > 0 - GAUSSIAN_KERNEL_SIZE / viewWidth && tex_coord.s < s + GAUSSIAN_KERNEL_SIZE / viewWidth
+            && tex_coord.t > 0 - GAUSSIAN_KERNEL_SIZE / viewHeight && tex_coord.t < s + GAUSSIAN_KERNEL_SIZE / viewHeight) {
             fog_data0 = texture2D(gaux3, tex_coord / s);
             fog_data1 = texture2D(gaux4, tex_coord / s);
             float alpha = texture2D(composite, tex_coord / s).a;
@@ -66,7 +72,7 @@ void main() {
             fog_data1.a = i == i1 ? k1 : i > i1 ? 1 : 0;
             break;
         }
-        if (tex_coord.s < s) break;
+        if (tex_coord.s < s - GAUSSIAN_KERNEL_SIZE / viewHeight) break;
     }
 
     gl_FragData[0] = color;

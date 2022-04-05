@@ -4,10 +4,10 @@ from scipy import interpolate
 import imageio
 from tqdm import tqdm
 
-ti.init(arch=ti.gpu, default_fp =ti.f32)  # Try to run on GPU
+ti.init(arch=ti.gpu, default_fp =ti.f64)  # Try to run on GPU
 
-vec3f = ti.types.matrix(3, 1, ti.f32)
-vec2f = ti.types.matrix(2, 1, ti.f32)
+vec3f = ti.types.matrix(3, 1, ti.f64)
+vec2f = ti.types.matrix(2, 1, ti.f64)
 
 tLUT_res = (256, 64)
 msLUT_res = (32, 32)
@@ -35,7 +35,7 @@ ground_albedo = 0.3
 
 
 @ti.func
-def rayIntersectSphere(ro, rd, rad: ti.f32) -> ti.f32:
+def rayIntersectSphere(ro, rd, rad: ti.f64) -> ti.f64:
     res = 0.0
     b = ro.dot(rd)
     c = ro.dot(ro) - rad * rad
@@ -49,7 +49,7 @@ def rayIntersectSphere(ro, rd, rad: ti.f32) -> ti.f32:
 
 
 @ti.func
-def getSphericalDir(theta: ti.f32, cos_phi: ti.f32) -> vec3f:
+def getSphericalDir(theta: ti.f64, cos_phi: ti.f64) -> vec3f:
     sin_phi = ti.sqrt(1 - cos_phi * cos_phi)
     cos_theta = ti.cos(theta)
     sin_theta = ti.sin(theta)
@@ -57,7 +57,7 @@ def getSphericalDir(theta: ti.f32, cos_phi: ti.f32) -> vec3f:
 
 
 @ti.func
-def getMiePhase(cos_theta: ti.f32):
+def getMiePhase(cos_theta: ti.f64):
     g = 0.8
     scale = 3.0 / (8.0 * np.pi)
 
@@ -68,7 +68,7 @@ def getMiePhase(cos_theta: ti.f32):
 
 
 @ti.func
-def getRayleighPhase(cos_theta: ti.f32):
+def getRayleighPhase(cos_theta: ti.f64):
     k = 3.0 / (16.0 * np.pi)
     return k * (1.0 + cos_theta * cos_theta)
 
@@ -94,7 +94,7 @@ def getScatteringValues(pos):
 
 
 @ti.func
-def bilerp(texture: ti.template(), u: ti.f32, v: ti.f32):
+def bilerp(texture: ti.template(), u: ti.f64, v: ti.f64):
     u = u * texture.shape[0] - 0.5
     v = v * texture.shape[1] - 0.5
     l = ti.floor(u)
@@ -264,7 +264,7 @@ view_pos = vec3f(0.0, ground_radius + 0.0002, 0.0)
 sun_angle = 1.
 
 @ti.kernel
-def cal_skyLUT(sun_angle: ti.f32):
+def cal_skyLUT(sun_angle: ti.f64):
     for i, j in skyLUT:
         u = i / (skyLUT_res[0] - 1)
         v = j / (skyLUT_res[1] - 1)
@@ -334,6 +334,9 @@ msLUT_np = msLUT.to_numpy()
 
 ti.tools.imwrite(tLUT_np, './utils/atmosphere_transmittance.png')
 ti.tools.imwrite(msLUT_np * 5, './utils/atmosphere_multiple_scattering.png')
+
+tLUT_np = tLUT_np.transpose(1, 0, 2)
+msLUT_np = msLUT_np.transpose(1, 0, 2)
 
 if __name__ == '__main__':
     gui = ti.GUI('Atmosphere', (256, 256))
