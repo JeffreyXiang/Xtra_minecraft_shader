@@ -16,12 +16,13 @@ for line in lines:
 data[0, :len(color_temperature_data)] = np.array(color_temperature_data)
 
 ''' WATER ABSORPTION '''
-water_absorption_data = imageio.imread('./utils/water_absorption.png')
-data[1, :water_absorption_data.shape[1]] = (water_absorption_data / 255.) ** (2.2)
+water_absorption_data = imageio.imread('./utils/water_absorption.png') / 255.
+data[1, :water_absorption_data.shape[1]] = water_absorption_data ** (2.2)
 
 ''' WATER SCATTERING '''
-water_scattering_data = imageio.imread('./utils/water_scattering.png')
-data[2, :water_scattering_data.shape[1]] = (water_scattering_data / 255.) ** (2.2)
+water_scattering_data = imageio.imread('./utils/water_scattering.png') / 255.
+water_scattering_data[..., :3] /= 2
+data[2, :water_scattering_data.shape[1]] = water_scattering_data ** (2.2)
 
 '''ATMOSPHERE'''
 import atmosphere_taichi as atmo

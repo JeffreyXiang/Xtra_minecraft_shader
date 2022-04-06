@@ -150,16 +150,16 @@ vec3 LUT_sky(vec3 rayDir) {
 }
 
 vec3 cal_water_color(float self_lum, float target_lum, float y_diff, float decay) {
-    float cutoff = target_lum < 1e-3 ? abs((target_lum - self_lum) * 15 / y_diff) : 1;
+    float cutoff = target_lum < 1e-3 ? abs((target_lum - self_lum) * 15 / y_diff) + 1e-3 : 1;
     cutoff = cutoff > 1 ? 1 : cutoff;
     float max_ = -log(decay);
     vec3 res = vec3(0.0);
     for (int i = 0; i < 8; i++) {
         float k = -log(1 - (i + 0.5) / 8 * (1 - decay)) / max_ / cutoff;
-        k = k > 1 ? 1 : k;
-        res += LUT_water_scattering(mix(self_lum, target_lum, k));
+        k = self_lum > target_lum ? (k > 1 ? 1 : k) : (k - (1 / cutoff) < -1 ? 0 : k - (1 / cutoff) + 1);
+        res += (1 - (i + 0.5) / 8 * (1 - decay)) * LUT_water_scattering(mix(self_lum, target_lum, k));
     }
-    res /= 8;
+    res = res / 8 * (1 - decay);
     return res;
 }
 
@@ -229,15 +229,15 @@ void main() {
     /* ILLUMINATION */
     float sun_angle = sunAngle < 0.25 ? 0.25 - sunAngle : sunAngle < 0.75 ? sunAngle - 0.25 : 1.25 - sunAngle;
     sun_angle = 1 - 4 * sun_angle;
-    float sun_angle_ = sun_angle < 0 ? 0 : sun_angle;
     vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
     vec3 sun_light = LUT_sun_color(sun_dir);
     vec3 moon_light = vec3(0.005);
-    float sky_light_mix = smoothstep(-0.05, 0.2, sun_angle);
+    float sky_light_mix = smoothstep(-0.05, 0.05, sun_angle);
     vec3 sky_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sky_light_mix);
     float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(0.005, 1, sky_light_mix);
-    float sunmoon_light_mix = smoothstep(0, 0.2, sun_angle);
+    float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_angle);
     vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sunmoon_light_mix);
+    vec3 sunmoon_lum = sunmoon_light;
     if (isEyeInWater == 0 && block_id1 > 1.5 || isEyeInWater == 1 && block_id1 < 1.5) {
         float shadow_water_dist = -((current_depth - texture2D(shadowtex0, shadow_texcoord).x) * 2 - 1 - shadowProjection[3][2]) / shadowProjection[2][2];
         shadow_water_dist = shadow_water_dist < 0 ? 0 : shadow_water_dist;
@@ -301,7 +301,7 @@ void main() {
             translucent = translucent * k1;
             float y0 = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord, depth0))).y;
             float y1 = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord, depth1))).y;
-            vec3 water_color = cal_water_color(1, lumi_data.y, y0 - y1, k1) * sky_brightness / SKY_ILLUMINATION_INTENSITY * lumi_data.w;
+            vec3 water_color = cal_water_color(1, lumi_data.y, y0 - y1, k1) * sunmoon_lum * lumi_data.w;
             fog_scatter0 = k1 * (1 - k1) * fog_scatter0 + (1 - k1) * (1 - k1) * alpha * water_color;
             fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * water_color;
             float k2 = fog(dist0, FOG_AIR_DECAY);
@@ -322,8 +322,8 @@ void main() {
             float y0 = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord, 0.0))).y;
             float y1 = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord, depth1))).y;
             float y2 = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord, depth0))).y;
-            vec3 water_color0 = cal_water_color(lumi_data.z, lumi_data.y, y0 - y1, k2) * sky_brightness / SKY_ILLUMINATION_INTENSITY * (0.5 * lumi_data.z + 0.5);
-            vec3 water_color1 = cal_water_color(lumi_data.z, lumi_data.w, y0 - y2, k1) * sky_brightness / SKY_ILLUMINATION_INTENSITY * (0.5 * lumi_data.z + 0.5);
+            vec3 water_color0 = cal_water_color(lumi_data.z, lumi_data.y, y0 - y1, k2) * sunmoon_lum;
+            vec3 water_color1 = cal_water_color(lumi_data.z, lumi_data.w, y0 - y2, k1) * sunmoon_lum;
             fog_scatter0 = k2 * (1 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * water_color0;
             fog_scatter1 = k1 * (1 - k1) * fog_scatter1 + (1 - k1) * (1 - k1) * water_color1;
             fog_decay0 = k2;
@@ -344,7 +344,7 @@ void main() {
             translucent = translucent * k2;
             float y0 = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord, 0.0))).y;
             float y2 = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord, depth0))).y;
-            vec3 water_color = cal_water_color(lumi_data.z, lumi_data.w, y0 -y2, k2) * sky_brightness / SKY_ILLUMINATION_INTENSITY * (0.5 * lumi_data.z + 0.5);
+            vec3 water_color = cal_water_color(lumi_data.z, lumi_data.w, y0 -y2, k2) * sunmoon_lum;
             fog_scatter0 = k2 * (2 - k2) * fog_scatter0 + (1 - k2) * (1 - k2) * alpha * water_color;
             fog_scatter1 = k2 * (2 - k2) * fog_scatter1 + (1 - k2) * (1 - k2) * water_color;
             fog_decay0 = k1 * k2;
