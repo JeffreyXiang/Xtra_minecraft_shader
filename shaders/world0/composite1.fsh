@@ -1,6 +1,6 @@
 #version 120
 
-#define PI 3.14159265358
+#define PI 3.1415926535898
 
 #define GAUSSIAN_KERNEL_SIZE 31
 #define GAUSSIAN_KERNEL_STRIDE 1
@@ -94,8 +94,8 @@ void getScatteringValues(vec3 pos,
                          out vec3 extinction) {
     float altitudeKM = (length(pos)-groundRadiusMM)*1000.0;
     // Note: Paper gets these switched up.
-    float rayleighDensity = exp(-altitudeKM/8.0);
-    float mieDensity = exp(-altitudeKM/1.2);
+    float rayleighDensity = min(exp(-altitudeKM/8.0), 10);
+    float mieDensity = min(exp(-altitudeKM/1.2), 10);
     
     rayleighScattering = rayleighScatteringBase*rayleighDensity;
     float rayleighAbsorption = rayleighAbsorptionBase*rayleighDensity;
@@ -2839,7 +2839,7 @@ void main() {
         
         float atmoDist = rayIntersectSphere(viewPos, rayDir, atmosphereRadiusMM);
         float groundDist = rayIntersectSphere(viewPos, rayDir, groundRadiusMM);
-        float tMax = (groundDist < 0.0) ? atmoDist : groundDist;
+        float tMax = (groundDist < 0.0) ? atmoDist : min(groundDist+1, atmoDist);
         vec3 lum = raymarchScattering(viewPos, rayDir, sunDir, tMax, ATMOSPHERE_SAMPLES);
         LUT_data = vec4(lum, 1.0);
     }

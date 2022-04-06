@@ -15,6 +15,7 @@ uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 uniform sampler2D shadowtex0;
 uniform sampler2D shadowtex1;
+uniform sampler2D noisetex;
 
 uniform float far;
 
@@ -47,5 +48,6 @@ void main() {
     vec3 fog_scatter1 = vec3(texture2D(gaux4, texcoord).rgb * fog_decay1);
     vec3 bloom = vec3(texture2D(colortex8, texcoord).rgb);
     vec3 texture_color = texture2D(colortex15, texcoord).rgb;
+    vec3 noise = texture2D(noisetex, texcoord).rgb;
     gl_FragData[0] = vec4(color , 1.0);
 }

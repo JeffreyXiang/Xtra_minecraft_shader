@@ -77,8 +77,8 @@ def getRayleighPhase(cos_theta: ti.f64):
 def getScatteringValues(pos):
     altitude_KM = ti.max((pos.norm() - ground_radius) * 1000.0, -100.0)
     # Note: Paper gets these switched up.
-    rayleigh_density = ti.exp(-altitude_KM/8.0)
-    mie_density = ti.exp(-altitude_KM/1.2)
+    rayleigh_density = ti.min(ti.exp(-altitude_KM/8.0), 10)
+    mie_density = ti.min(ti.exp(-altitude_KM/1.2), 10)
     
     rayleigh_scattering = rayleigh_scattering_base * rayleigh_density
     rayleigh_absorption = rayleigh_absorption_base * rayleigh_density
@@ -147,17 +147,16 @@ def cal_tLUT():
         pos = vec3f(0, height, 0)
         sun_dir = vec3f(0, sun_cos_theta, sun_sin_theta)
         transmittance = vec3f(0.0)
-        if rayIntersectSphere(pos, sun_dir, ground_radius) <= 0:
-            atmo_dist = rayIntersectSphere(pos, sun_dir, atmosphere_radius)
-            t = 0.
-            transmittance = vec3f(1., 1., 1.)
-            for k in range(sun_transmittance_steps):
-                new_t = (float(k) + 0.3) / sun_transmittance_steps * atmo_dist
-                dt = new_t - t
-                t = new_t
-                new_pos = pos + t * sun_dir
-                rayleigh_scattering, mie_scattering, extinction = getScatteringValues(new_pos)
-                transmittance *= ti.exp(-dt * extinction)
+        atmo_dist = rayIntersectSphere(pos, sun_dir, atmosphere_radius)
+        t = 0.
+        transmittance = vec3f(1., 1., 1.)
+        for k in range(sun_transmittance_steps):
+            new_t = (float(k) + 0.3) / sun_transmittance_steps * atmo_dist
+            dt = new_t - t
+            t = new_t
+            new_pos = pos + t * sun_dir
+            rayleigh_scattering, mie_scattering, extinction = getScatteringValues(new_pos)
+            transmittance *= ti.exp(-dt * extinction)
         tLUT[i, j] = transmittance
 
 
@@ -188,7 +187,7 @@ def cal_ms_buffer():
         
         atmo_dist = rayIntersectSphere(pos, ray_dir, atmosphere_radius)
         ground_dist = rayIntersectSphere(pos, ray_dir, ground_radius)
-        t_max = atmo_dist if ground_dist <= 0 else ground_dist
+        t_max = atmo_dist if ground_dist <= 0 else ti.min(ground_dist + 1, atmo_dist)
         
         cos_theta = ray_dir.dot(sun_dir)
 

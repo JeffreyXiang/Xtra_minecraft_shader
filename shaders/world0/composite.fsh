@@ -23,6 +23,7 @@ const int gaux4Format = RGBA16F;
 const int colortex8Format = RGBA16F;
 const int colortex15Format = RGBA32F;
 const int shadowMapResolution = 4096;   //[1024 2048 4096] 
+const int noiseTextureResolution = 256;
 const float	sunPathRotation	= -30.0;
 
 uniform sampler2D gcolor;
