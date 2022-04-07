@@ -11,6 +11,10 @@
 #define SSR_F0 0.04
 #define SSR_ETA 1.05
 
+#define FOG_AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01 0.02 0.05]
+#define FOG_THICKNESS 256
+#define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
+
 uniform mat4 gbufferModelView;
 uniform mat4 gbufferModelViewInverse;
 uniform mat4 gbufferProjection;
@@ -86,6 +90,20 @@ vec2 nearest(vec2 texcoord) {
     return vec2((floor(texcoord.s * viewWidth) + 0.5) / viewWidth, (floor(texcoord.t * viewHeight) + 0.5) / viewHeight);
 }
 
+float fog(float dist, float decay) {
+    dist = dist < 0 ? 0 : dist;
+    dist = dist * decay / 16 + 1;
+    dist = dist * dist;
+    dist = dist * dist;
+    dist = dist * dist;
+    dist = dist * dist;
+    return 1 / dist;
+}
+
+vec3 LUT_water_scattering(float decay) {
+    return texture2D(colortex15, vec2((0.5 + (1 - decay) * 255) / viewWidth, 2.5 / viewHeight)).rgb;
+}
+
 vec3 LUT_sun_color(vec3 sunDir) {
 	float sunCosZenithAngle = sunDir.y;
     vec2 uv = vec2((0.5 + 255 * clamp(0.5 + 0.5 * sunCosZenithAngle, 0.0, 1.0)) / viewWidth,
@@ -119,6 +137,20 @@ vec3 LUT_sky(vec3 rayDir) {
     uv.x = (0.5 + uv.x * 255) / viewWidth;
     uv.y = (0.5 + uv.y * 127 + 99) / viewHeight;
     return texture2D(colortex15, uv).rgb;
+}
+
+vec3 cal_water_color(float self_lum, float target_lum, float y_diff, float decay) {
+    float cutoff = target_lum < 1e-3 ? abs((target_lum - self_lum) * 15 / y_diff) + 1e-3 : 1;
+    cutoff = cutoff > 1 ? 1 : cutoff;
+    float max_ = -log(decay);
+    vec3 res = vec3(0.0);
+    for (int i = 0; i < 8; i++) {
+        float k = -log(1 - (i + 0.5) / 8 * (1 - decay)) / max_ / cutoff;
+        k = self_lum > target_lum ? (k > 1 ? 1 : k) : (k - (1 / cutoff) < -1 ? 0 : k - (1 / cutoff) + 1);
+        res += (1 - (i + 0.5) / 8 * (1 - decay)) * LUT_water_scattering(mix(self_lum, target_lum, k));
+    }
+    res = res / 8 * (1 - decay);
+    return res;
 }
 
 vec3 cal_sun_bloom(vec3 ray_dir, vec3 sun_dir) {
@@ -196,8 +228,7 @@ void main() {
             if (dot(direction, old_normal) < 0) direction = normalize(direction - 2 * dot(direction, old_normal) * old_normal);
             water_depth = dist1 - dist0;
             water_depth = water_depth < 0 ? 0 : water_depth;
-            float sin_ = length(cross(direction, normal));
-            vec2 tex_coord = texcoord - 0.5 * water_depth * sin_ / dist1 * offset.xy;
+            vec2 tex_coord = texcoord - 0.3 * water_depth / dist1 * offset.xy;
             if (texture2D(gaux1, tex_coord).w > 1.5) {
                 color_data = texture2D(gcolor, tex_coord);
                 color = color_data.rgb;
@@ -280,8 +311,19 @@ void main() {
             if (hit == 0) {
                 vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
                 vec3 ray_dir = normalize(view_coord_to_world_coord(direction * 100));
-                reflect_color = SKY_ILLUMINATION_INTENSITY * LUT_sky(ray_dir);
-                color += SKY_ILLUMINATION_INTENSITY * cal_sun_bloom(ray_dir, sun_dir);
+                if (isEyeInWater == 0) {
+                    float k = fog(dist0, FOG_AIR_DECAY);
+                    reflect_color = k * SKY_ILLUMINATION_INTENSITY * lumi_data.w * LUT_sky(ray_dir);
+                    color += k * SKY_ILLUMINATION_INTENSITY * lumi_data.w * cal_sun_bloom(ray_dir, sun_dir);
+                }
+                else {
+                    vec3 sun_light = LUT_sun_color(sun_dir);
+                    vec3 moon_light = vec3(0.005);
+                    float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_dir.y);
+                    vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sunmoon_light_mix);
+                    vec3 sunmoon_lum = sunmoon_light;
+                    reflect_color = fog(dist0, FOG_WATER_DECAY) * sunmoon_lum * cal_water_color(lumi_data.w, 0, 32, fog(abs(32 / ray_dir.y), FOG_WATER_DECAY));
+                }
             }
             color = (1 - f_r) * color + f_r * reflect_color;
         }
