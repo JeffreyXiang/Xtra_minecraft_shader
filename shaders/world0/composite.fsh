@@ -95,7 +95,7 @@ void main() {
     float block_id0 = normal_data0.w;
     vec4 normal_data1 = texture2D(gaux1, texcoord);
     vec4 lumi_data = texture2D(gaux2, texcoord);
-    float alpha = texture2D(gaux3, texcoord).x;
+    float alpha = texture2D(composite, texcoord).a;
     vec4 translucent_data = texture2D(gaux4, texcoord);
     float block_id1 = translucent_data.x;
     normal_data1.w = block_id1;
