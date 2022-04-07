@@ -6,7 +6,7 @@ _w: water
 -g: glass
 
 ----------------------------------------------------------------
- Idx |   Buffer      | C |     gbuffers     |   composite0-3   |
+ Idx |   Buffer      | C |     gbuffers     |   composite0-2   |
 -----------------------------------------------------------------
      |               | r |                  |                  |
      |               |---|                  |                  |
@@ -140,6 +140,7 @@ _w: water
 
 #version 120
 
+const int RGBA8F = 0;
 const int RGBA16F = 0;
 const int RGBA32F = 0;
 const int RGB16F = 0;
@@ -198,7 +199,7 @@ void main() {
     // vec3 depth_g = vec3(texture2D(gaux4, texcoord).x);
     // vec3 sky_light_g = vec3(texture2D(gaux4, texcoord).y);
 
-    /* composite0-3 */
+    /* composite0-2 */
     vec3 color_s = vec3(texture2D(gcolor, texcoord).rgb);
     vec3 ao = vec3(texture2D(gcolor, texcoord).a);
     vec3 dist_s = vec3(texture2D(gdepth, texcoord).x / far);

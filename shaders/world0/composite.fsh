@@ -6,6 +6,7 @@
 
 #define SSAO_ENABLE 1 // [0 1]
 #define SSAO_DISTANCE 64
+#define SSAO_RES_SCALE 0.5   //[0.25 0.5 1]
 #define SSAO_SAMPLE_NUM 32   //[4 8 16 32 64 128 256]
 #define SSAO_SAMPLE_RADIUS 0.5   //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define SSAO_INTENSITY 1.0   //[0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0]
@@ -97,12 +98,11 @@ void main() {
     float dist_s = 9999;
     float dist_w = 9999;
     float dist_g = 9999;
-    vec3 view_coord;
 
     if (block_id_s > 0.5) {
         vec3 screen_coord = vec3(texcoord, depth_s);
-        view_coord = screen_coord_to_view_coord(screen_coord);
-        dist_s = length(view_coord);
+        vec3 view_coord_ = screen_coord_to_view_coord(screen_coord);
+        dist_s = length(view_coord_);
     }
     if (depth_w > 0){
         vec3 screen_coord = vec3(texcoord, depth_w);
@@ -123,29 +123,40 @@ void main() {
     float ao = 1;
 #if SSAO_ENABLE
     /* SSAO */
-    if (block_id_s > 0.5 && dist_s < SSAO_DISTANCE) {
-        seed(texcoord);
-        float ssao_sample_depth, y, xz, theta, r;
-        vec3 ssao_sample, tangent, bitangent;
-        int oc = 0, sum = 0;
-        for (int i = 0; i < SSAO_SAMPLE_NUM; i++) {
-            y = rand();
-            xz = sqrt(1 - y * y);
-            theta = 2 * PI * rand();
-            r = rand();
-            r = r * SSAO_SAMPLE_RADIUS;
-            ssao_sample = r * vec3(xz * cos(theta), y, xz * sin(theta));
-            tangent = normalize(cross(normal_s, normal_s.y < 0.707 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
-            bitangent = cross(normal_s, tangent);
-            ssao_sample = SSAO_SAMPLE_RADIUS * (ssao_sample.x * bitangent + ssao_sample.y * normal_s + ssao_sample.z * tangent);
-            ssao_sample += view_coord;
-            ssao_sample = view_coord_to_screen_coord(ssao_sample);
-            sum++;
-            ssao_sample_depth = texture2D(depthtex1, ssao_sample.st).x;
-            if (ssao_sample.z > ssao_sample_depth && (ssao_sample.z - ssao_sample_depth) * dist_s < 0.02 * SSAO_SAMPLE_RADIUS) oc++;
+    vec2 ssao_texcoord = (texcoord - 0.5) / SSAO_RES_SCALE + 0.5;
+    if (ssao_texcoord.x > 0 && ssao_texcoord.x < 1 && ssao_texcoord.y > 0 && ssao_texcoord.y < 1) {
+        vec4 ssao_normal_data_s = texture2D(gnormal, ssao_texcoord);
+        vec3 ssao_normal_s = ssao_normal_data_s.rgb;
+        float ssao_block_id_s = ssao_normal_data_s.a;
+        if (ssao_block_id_s > 0.5) {
+            vec3 ssao_screen_coord = vec3(ssao_texcoord, texture2D(depthtex1, ssao_texcoord).x);
+            vec3 ssao_view_coord = screen_coord_to_view_coord(ssao_screen_coord);
+            float ssao_dist_s = length(ssao_view_coord);
+            if (ssao_dist_s < SSAO_DISTANCE) {
+                seed(ssao_texcoord);
+                float ssao_sample_depth, y, xz, theta, r;
+                vec3 ssao_sample, tangent, bitangent;
+                int oc = 0, sum = 0;
+                for (int i = 0; i < SSAO_SAMPLE_NUM; i++) {
+                    y = rand();
+                    xz = sqrt(1 - y * y);
+                    theta = 2 * PI * rand();
+                    r = rand();
+                    r = r * SSAO_SAMPLE_RADIUS;
+                    ssao_sample = r * vec3(xz * cos(theta), y, xz * sin(theta));
+                    tangent = normalize(cross(ssao_normal_s, ssao_normal_s.y < 0.707 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
+                    bitangent = cross(ssao_normal_s, tangent);
+                    ssao_sample = SSAO_SAMPLE_RADIUS * (ssao_sample.x * bitangent + ssao_sample.y * ssao_normal_s + ssao_sample.z * tangent);
+                    ssao_sample += ssao_view_coord;
+                    ssao_sample = view_coord_to_screen_coord(ssao_sample);
+                    sum++;
+                    ssao_sample_depth = texture2D(depthtex1, ssao_sample.st).x;
+                    if (ssao_sample.z > ssao_sample_depth && (ssao_sample.z - ssao_sample_depth) * ssao_dist_s < 0.02 * SSAO_SAMPLE_RADIUS) oc++;
+                }
+                if (sum > 0) ao = 1 - SSAO_INTENSITY * oc / sum * (1 - smoothstep(SSAO_DISTANCE - 32, SSAO_DISTANCE, ssao_dist_s));
+                ao = clamp(ao, 0, 1);
+            }
         }
-        if (sum > 0) ao = 1 - SSAO_INTENSITY * oc / sum * (1 - smoothstep(32, 64, dist_s));
-        ao = clamp(ao, 0, 1);
     }
 #endif
 
