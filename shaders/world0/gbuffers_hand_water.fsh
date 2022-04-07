@@ -1,8 +1,6 @@
 #version 120
 
 uniform sampler2D texture;
-uniform sampler2D gdepth;
-uniform sampler2D gaux4;
 
 uniform int heldBlockLightValue;
 uniform int heldBlockLightValue2;
@@ -14,18 +12,19 @@ varying vec2 texcoord;
 varying vec3 normal;
 varying vec2 lightMapCoord;
 
-/* DRAWBUFFERS:137 */
+vec2 pack_depth(float depth) {
+    float low = fract(1024 * depth);
+    float high = depth - low / 1024;
+    return vec2(high, low);
+}
+
+/* DRAWBUFFERS:357 */
 void main() {
     // texture
     vec4 blockColor = texture2D(texture, texcoord.st);
     blockColor.rgb *= color;
 
-    vec2 depth_t_data = texture2D(gdepth, vec2(gl_FragCoord.s / viewWidth, gl_FragCoord.t / viewHeight));
-    vec2 lum_t_data = texture2D(gaux4, vec2(gl_FragCoord.s / viewWidth, gl_FragCoord.t / viewHeight));
-    depth_t_data.y = gl_FragCoord.z;
-    lum_t_data.y = lightMapCoord.t * 1.066667 - 0.03333333;
-
-    gl_FragData[0] = vec4(depth_t_data, 0.0, 1.0);
-    gl_FragData[1] = blockColor;
-    gl_FragData[2] = vec4(lum_t_data, 0.0, 1.0);
+    gl_FragData[0] = blockColor;
+    gl_FragData[1] = vec4(normal, 1.0);
+    gl_FragData[2] = vec4(pack_depth(gl_FragCoord.z), lightMapCoord.t * 1.066667 - 0.03333333, 1.0);
 }
