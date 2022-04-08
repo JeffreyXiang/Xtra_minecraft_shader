@@ -16,8 +16,6 @@ uniform sampler2D gdepth;
 uniform sampler2D gnormal;
 uniform sampler2D composite;
 uniform sampler2D depthtex1;
-uniform sampler2D gaux1;
-uniform sampler2D gaux2;
 uniform sampler2D gaux3;
 uniform sampler2D gaux4;
 uniform sampler2D colortex15;
@@ -55,10 +53,6 @@ float rand(){
 }
 //----------------------------------------
 
-float unpack_depth(vec2 depth_pack) {
-    return depth_pack.x + depth_pack.y / 1024;
-}
-
 vec3 screen_coord_to_view_coord(vec3 screen_coord) {
     vec4 ndc_coord = vec4(screen_coord * 2 - 1, 1);
     vec4 clid_coord = gbufferProjectionInverse * ndc_coord;
@@ -73,12 +67,13 @@ vec3 view_coord_to_screen_coord(vec3 view_coord) {
     return screen_coord;
 }
 
-/* RENDERTARGETS: 0,1,3,4,5,6,15 */
+/* RENDERTARGETS: 0,1,3,6,7,15 */
 void main() {
     vec3 color_s = texture2D(gcolor, texcoord).rgb;
-    vec2 lum_data_s = texture2D(gdepth, texcoord).xy;
-    float block_light_s = lum_data_s.x;
-    float sky_light_s = lum_data_s.y;
+    vec3 data_w = texture2D(gdepth, texcoord).rgb;
+    float depth_w = data_w.x;
+    float sky_light_w = data_w.y;
+    float block_id_w = data_w.z - 1;
     vec4 normal_data_s = texture2D(gnormal, texcoord);
     vec3 normal_s = normal_data_s.rgb;
     float block_id_s = normal_data_s.a;
@@ -86,14 +81,13 @@ void main() {
     vec4 color_data_g = texture2D(composite, texcoord);
     vec3 color_g = color_data_g.rgb;
     float alpha = color_data_g.a;
-    vec3 normal_w = texture2D(gaux1, texcoord).rgb;
-    vec3 normal_g = texture2D(gaux2, texcoord).rgb;
-    vec3 lum_data_w = texture2D(gaux3, texcoord).xyz;
-    float depth_w = unpack_depth(lum_data_w.xy);
-    float sky_light_w = lum_data_w.z;
-    vec3 lum_data_g = texture2D(gaux4, texcoord).xyz;
-    float depth_g = unpack_depth(lum_data_g.xy);
-    float sky_light_g = lum_data_g.z;
+    vec2 lum_data_s = texture2D(gaux3, texcoord).xy;
+    float block_light_s = lum_data_s.x;
+    float sky_light_s = lum_data_s.y;
+    vec3 data_g = texture2D(gaux4, texcoord).xyz;
+    float depth_g = data_g.x;
+    float sky_light_g = data_g.y;
+    float block_id_g = data_g.z;
 
     float dist_s = 9999;
     float dist_w = 9999;
@@ -104,16 +98,19 @@ void main() {
         vec3 view_coord_ = screen_coord_to_view_coord(screen_coord);
         dist_s = length(view_coord_);
     }
-    if (depth_w > 0){
+    else depth_s = 2;
+    if (block_id_w > 0.5){
         vec3 screen_coord = vec3(texcoord, depth_w);
         vec3 view_coord_ = screen_coord_to_view_coord(screen_coord);
         dist_w = length(view_coord_);
     }
-    if (depth_g > 0){
+    else depth_w = 2;
+    if (block_id_g > 0.5){
         vec3 screen_coord = vec3(texcoord, depth_g);
         vec3 view_coord_ = screen_coord_to_view_coord(screen_coord);
         dist_g = length(view_coord_);
     }
+    else depth_g = 2;
     
     
     /* INVERSE GAMMA */
@@ -167,11 +164,10 @@ void main() {
         LUT_data = texture2D(colortex15, LUT_texcoord);
     
     gl_FragData[0] = vec4(color_s, ao);
-    gl_FragData[1] = vec4(dist_s, dist_w, dist_g, 0.0);
+    gl_FragData[1] = vec4(depth_s, depth_w, depth_g, 0.0);
     gl_FragData[2] = vec4(color_g, alpha);
-    gl_FragData[3] = vec4(normal_w, depth_w);
-    gl_FragData[4] = vec4(normal_g, depth_g);
-    gl_FragData[5] = vec4(block_light_s, sky_light_s, sky_light_w, sky_light_g);
-    gl_FragData[6] = LUT_data;
+    gl_FragData[3] = vec4(block_light_s, sky_light_s, sky_light_w, sky_light_g);
+    gl_FragData[4] = vec4(dist_s, dist_w, dist_g, 0.0);
+    gl_FragData[5] = LUT_data;
 ;
 }
