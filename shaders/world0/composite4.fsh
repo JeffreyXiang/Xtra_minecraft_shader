@@ -6,7 +6,7 @@
 
 #define SKY_ILLUMINATION_INTENSITY 3.0  //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
 
-#define SSR_STEP_MAX_ITER 100
+#define SSR_STEP_MAX_ITER 36
 #define SSR_DIV_MAX_ITER 6
 #define SSR_F0 0.04
 #define SSR_ETA 1.05
@@ -187,17 +187,16 @@ vec3 cal_sun_bloom(vec3 ray_dir, vec3 sun_dir) {
 
 /* DRAWBUFFERS: 0 */
 void main() {
-    vec3 color_s = texture2D(gcolor, texcoord).rgb;
+    vec3 color_s;
+    float block_id_s, sky_light_s;
+    vec3 reflect_color_w = vec3(0.0);
+    vec4 color_data_g;
+    vec3 color_g, reflect_color_g;
+    float alpha;
     vec3 depth_data = texture2D(gdepth, texcoord).xyz;
     float depth_s = depth_data.x;
     float depth_w = depth_data.y;
     float depth_g = depth_data.z;
-    vec4 normal_data_s = texture2D(gnormal, texcoord);
-    vec3 normal_s = normal_data_s.rgb;
-    float block_id_s = normal_data_s.a;
-    vec4 color_data_g = texture2D(composite, texcoord);
-    vec3 color_g = color_data_g.rgb;
-    float alpha = color_data_g.a;
     vec2 lum_data = texture2D(gaux3, texcoord).zw;
     float sky_light_w = lum_data.x;
     float sky_light_g = lum_data.y;
@@ -211,11 +210,6 @@ void main() {
         normal_w = texture2D(gaux1, texcoord).rgb;
         vec3 screen_coord = vec3(texcoord, depth_w);
         view_coord_w = screen_coord_to_view_coord(screen_coord);
-    }
-    if (depth_g < 1.5) {
-        normal_g = texture2D(gaux2, texcoord).rgb;
-        vec3 screen_coord = vec3(texcoord, depth_g);
-        view_coord_g = screen_coord_to_view_coord(screen_coord);
     }
 
     /* WATER REFRACTION */
@@ -248,14 +242,16 @@ void main() {
         normal_w = normalize(normal_w);
         float water_depth = dist_s - dist_w;
         water_depth = water_depth < 0 ? 0 : water_depth;
-        vec2 texcoord_ = texcoord - 0.3 * water_depth / dist_s * offset.xy;
+        vec2 texcoord_ = texcoord - 0.1 * water_depth / dist_s * offset.xy;
         if (texture2D(gdepth, texcoord_).y < 1.5) {
             texcoord_s = texcoord_;
         }
+        dist_g = (depth_g < 1.5 ? dist_g : dist_s);
         water_depth = dist_g - dist_w;
         if (water_depth > 0) {
-            texcoord_ = texcoord - 0.3 * water_depth / dist_g * offset.xy;
-            if (texture2D(gdepth, texcoord_).y < 1.5) {
+            texcoord_ = texcoord - 0.1 * water_depth / dist_g * offset.xy;
+            vec2 depth_data = texture2D(gdepth, texcoord_).yz;
+            if (depth_data.x < depth_data.y) {
                 texcoord_g = texcoord_;
             }
         }
@@ -263,15 +259,16 @@ void main() {
 
     /* WATER REFLECTION */
     float fr_w = 0, reflect_dist_w = 0;
-    int hit_w;
+    int hit_w = 0;
     vec2 reflect_texcoord_w = vec2(0.0);
+    vec3 reflect_direction_w;
     if (depth_w < 1.5 && !(isEyeInWater == 1 && depth_g < depth_w)) {
         seed(texcoord);
-        vec3 direction = reflect(normalize(view_coord_w), normal_w);
-        if (dot(direction, old_normal_w) < 0) direction = normalize(direction - 2 * dot(direction, old_normal_w) * old_normal_w);
-        if (isEyeInWater == 0) fr_w = 1 - dot(direction, normal_w);
+        reflect_direction_w = reflect(normalize(view_coord_w), normal_w);
+        if (dot(reflect_direction_w, old_normal_w) < 0) reflect_direction_w = normalize(reflect_direction_w - 2 * dot(reflect_direction_w, old_normal_w) * old_normal_w);
+        if (isEyeInWater == 0) fr_w = 1 - dot(reflect_direction_w, normal_w);
         else {
-            float sin_t = SSR_ETA * length(cross(direction, normal_w));
+            float sin_t = SSR_ETA * length(cross(reflect_direction_w, normal_w));
             sin_t = sin_t > 1 ? 1 : sin_t;
             fr_w = 1 - sqrt(1 - sin_t * sin_t);
         }
@@ -280,12 +277,13 @@ void main() {
         vec3 reflect_coord = view_coord_w, screen_coord;
         int i, visible = 1;
         for (i = 0; i < SSR_STEP_MAX_ITER; i++) {
-            k = length(direction - dot(direction, reflect_coord) / dot(reflect_coord, reflect_coord) * reflect_coord);
+            k = length(reflect_direction_w - dot(reflect_direction_w, reflect_coord) / dot(reflect_coord, reflect_coord) * reflect_coord);
             k = k / reflect_dist;
-            t_step = 0.01 / k;
-            t_step = t_step > 2 ? 2 : t_step;
+            k = k > 0.2 ? 0.2 : k;
+            t_step = 0.02 / k;
+            t_step = t_step > 10 ? 10 : t_step;
             t_step *= 0.75 + 0.5 * rand();
-            reflect_coord = view_coord_w + (t + t_step) * direction;
+            reflect_coord = view_coord_w + (t + t_step) * reflect_direction_w;
             if (reflect_coord.z > 0) {
                 t_oc = 0;
                 visible = 1;
@@ -300,14 +298,14 @@ void main() {
                 h = t_step;
                 for (int j = 0; j < SSR_DIV_MAX_ITER; j++) {
                     t_step = 0.5 * (l + h);
-                    reflect_coord = view_coord_w + (t + t_step) * direction;
+                    reflect_coord = view_coord_w + (t + t_step) * reflect_direction_w;
                     reflect_dist = length(reflect_coord);
                     screen_coord = view_coord_to_screen_coord(reflect_coord);
                     dist = texture2D(gaux4, screen_coord.st).x;
                     if (reflect_dist > dist)  h = t_step;
                     else l = t_step;
                 }
-                if (reflect_dist > dist - 1e-3 / k && reflect_dist < dist + 1e-3 / k && abs(dist - texture2D(gaux4, nearest(screen_coord.st)).x) < 1) {
+                if (reflect_dist > dist - 1e-3 / k && reflect_dist < dist + 1e-3 / k && abs(dist - texture2D(gaux4, nearest(screen_coord.st)).x) < 10) {
                     hit_w = 1;
                     reflect_texcoord_w = screen_coord.st;
                     reflect_dist_w = reflect_dist;
@@ -328,6 +326,159 @@ void main() {
             t_oc += (t - t_in);
     }
 
-    color_s = (1 - fr_w) * texture2D(gcolor, texcoord_s).rgb + fr_w * (hit_w == 1 ? texture2D(gcolor, reflect_texcoord_w).rgb : 0);
+    depth_g = texture2D(gdepth, texcoord_g).z;
+    if (depth_g < 1.5) {
+        dist_g = texture2D(gaux4, texcoord_g).z;
+        normal_g = texture2D(gaux2, texcoord_g).rgb;
+        vec3 screen_coord = vec3(texcoord_g, depth_g);
+        view_coord_g = screen_coord_to_view_coord(screen_coord);
+    }
+
+    /* GLASS REFLECTION */
+    float fr_g = 0, reflect_dist_g = 0;
+    int hit_g = 0;
+    vec2 reflect_texcoord_g = vec2(0.0);
+    vec3 reflect_direction_g;
+    if (depth_g < 1.5 && depth_w > depth_g) {
+        seed(texcoord);
+        reflect_direction_g = reflect(normalize(view_coord_g), normal_g);
+        if (isEyeInWater == 0) fr_g = 1 - dot(reflect_direction_g, normal_g);
+        else {
+            float sin_t = SSR_ETA * length(cross(reflect_direction_g, normal_g));
+            sin_t = sin_t > 1 ? 1 : sin_t;
+            fr_g = 1 - sqrt(1 - sin_t * sin_t);
+        }
+        fr_g = SSR_F0 + (1 - SSR_F0) * fr_g * fr_g * fr_g * fr_g * fr_g;
+        float t = 0, t_oc = 0, t_step, t_in, k, l, h, dist, reflect_dist = dist_g;
+        vec3 reflect_coord = view_coord_g, screen_coord;
+        int i, visible = 1;
+        for (i = 0; i < SSR_STEP_MAX_ITER; i++) {
+            k = length(reflect_direction_g - dot(reflect_direction_g, reflect_coord) / dot(reflect_coord, reflect_coord) * reflect_coord);
+            k = k / reflect_dist;
+            k = k > 0.2 ? 0.2 : k;
+            t_step = 0.02 / k;
+            t_step = t_step > 10 ? 10 : t_step;
+            t_step *= 0.75 + 0.5 * rand();
+            reflect_coord = view_coord_g + (t + t_step) * reflect_direction_g;
+            if (reflect_coord.z > 0) {
+                t_oc = 0;
+                visible = 1;
+                break;
+            }
+            reflect_dist = length(reflect_coord);
+            screen_coord = view_coord_to_screen_coord(reflect_coord);
+            if (screen_coord.s < 0 || screen_coord.s > 1 || screen_coord.t < 0 || screen_coord.t > 1) {break;}
+            dist = texture2D(gaux4, screen_coord.st).x;
+            if (visible == 1 && reflect_dist > dist) {
+                l = 0;
+                h = t_step;
+                for (int j = 0; j < SSR_DIV_MAX_ITER; j++) {
+                    t_step = 0.5 * (l + h);
+                    reflect_coord = view_coord_g + (t + t_step) * reflect_direction_g;
+                    reflect_dist = length(reflect_coord);
+                    screen_coord = view_coord_to_screen_coord(reflect_coord);
+                    dist = texture2D(gaux4, screen_coord.st).x;
+                    if (reflect_dist > dist)  h = t_step;
+                    else l = t_step;
+                }
+                if (reflect_dist > dist - 1e-3 / k && reflect_dist < dist + 1e-3 / k && abs(dist - texture2D(gaux4, nearest(screen_coord.st)).x) < 10) {
+                    hit_g = 1;
+                    reflect_texcoord_g = screen_coord.st;
+                    reflect_dist_g = reflect_dist;
+                    break;
+                }
+                else {
+                    visible = 0;
+                    t_in = t + t_step;
+                }
+            }
+            else if (visible == 0 && reflect_dist < dist) {
+                visible = 1;
+                t_oc += (t - t_in);
+            }
+            t += t_step;
+        }
+        if (visible == 0)
+            t_oc += (t - t_in);
+    }
+
+    /* LIGHT PROPAGATION */
+    float k;
+    float eye_brightness = eyeBrightnessSmooth.y / 240.;
+    vec3 fog_color = eye_brightness * fogColor;
+    color_s = texture2D(gcolor, texcoord_s).rgb;
+    depth_s = texture2D(gdepth, texcoord_s).x;
+    block_id_s = texture2D(gnormal, texcoord_s).w;
+    sky_light_s = texture2D(gaux3, texcoord_s).y;
+    dist_s = block_id_s > 0.5 ? texture2D(gaux4, texcoord_s).x : FOG_AIR_THICKNESS;
+    if (isEyeInWater == 0) {
+        if (depth_w < 1.5 && !(isEyeInWater == 1 && depth_g < depth_w)) {
+            vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
+            vec3 sun_light = LUT_sun_color(sun_dir);
+            vec3 moon_light = vec3(0.005);
+            float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_dir.y);
+            vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sunmoon_light_mix);
+            k = fog(dist_s - dist_w, FOG_WATER_DECAY);
+            float y_s = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord_s, depth_s))).y;
+            float y_w = view_coord_to_world_coord(view_coord_w).y;
+            color_s = k * color_s + sunmoon_light * sky_light_w * cal_water_color(sky_light_w, sky_light_s, y_w - y_s, k);
+            color_s = mix(fog_color, color_s, fog(dist_w, FOG_AIR_DECAY));
+            if (hit_w == 1) {
+                reflect_color_w = texture2D(gcolor, reflect_texcoord_w).rgb;
+                reflect_color_w = mix(fog_color, reflect_color_w, fog(reflect_dist_w, FOG_AIR_DECAY));
+            }
+            else {
+                vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_w * 100));
+                reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * LUT_sky(ray_dir);
+                reflect_color_w += SKY_ILLUMINATION_INTENSITY / fr_w * sky_light_w * cal_sun_bloom(ray_dir, sun_dir);
+                reflect_color_w = mix(fog_color, reflect_color_w, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
+            }
+            if (depth_g < 1.5) {
+                color_data_g = texture2D(composite, texcoord_g);
+                color_g = color_data_g.rgb;
+                alpha = color_data_g.a;
+                alpha = (1 - fr_g) * alpha + fr_g;
+                if (depth_w > depth_g) {
+                    if (hit_g == 1) {
+                    reflect_color_g = texture2D(gcolor, reflect_texcoord_g).rgb;
+                    reflect_color_g = mix(fog_color, reflect_color_g, fog(reflect_dist_g, FOG_AIR_DECAY));
+                    }
+                    else {
+                        vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
+                        vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
+                        reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
+                        reflect_color_g += SKY_ILLUMINATION_INTENSITY / fr_g * sky_light_g * cal_sun_bloom(ray_dir, sun_dir);
+                        reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
+                    }
+                    color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
+                    color_g = mix(alpha * fog_color, color_g, fog(dist_g, FOG_AIR_DECAY));
+                }
+            }
+        }
+        else {
+            color_s = mix(fog_color, color_s, fog(dist_s, FOG_AIR_DECAY));
+            if (depth_g < 1.5) {
+                color_data_g = texture2D(composite, texcoord_g);
+                color_g = color_data_g.rgb;
+                alpha = color_data_g.a;
+                alpha = (1 - fr_g) * alpha + fr_g;
+                if (hit_g == 1) {
+                    reflect_color_g = texture2D(gcolor, reflect_texcoord_g).rgb;
+                    reflect_color_g = mix(fog_color, reflect_color_g, fog(reflect_dist_g, FOG_AIR_DECAY));
+                }
+                else {
+                    vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
+                    vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
+                    reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
+                    reflect_color_g += SKY_ILLUMINATION_INTENSITY / fr_g * sky_light_g * cal_sun_bloom(ray_dir, sun_dir);
+                    reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
+                }
+                color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
+                color_g = mix(alpha * fog_color, color_g, fog(dist_g, FOG_AIR_DECAY));
+            }
+        }
+    }
+
+    color_s = (1 - alpha) * (1 - fr_w) * color_s + color_g + (1 - alpha) * fr_w * reflect_color_w;
     gl_FragData[0] = vec4(color_s, 1.0);
 }

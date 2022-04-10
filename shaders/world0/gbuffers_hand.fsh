@@ -9,7 +9,7 @@ varying vec2 texcoord;
 varying vec3 normal;
 varying vec2 lightMapCoord;
 
-/* DRAWBUFFERS:025 */
+/* DRAWBUFFERS:026 */
 void main() {
     // texture
     vec4 blockColor = texture2D(texture, texcoord.st);
