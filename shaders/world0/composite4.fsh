@@ -159,7 +159,7 @@ vec3 cal_water_color(float self_lum, float target_lum, float y_diff, float decay
     for (int i = 0; i < 8; i++) {
         float k = -log(1 - (i + 0.5) / 8 * (1 - decay)) / max_ / cutoff;
         k = self_lum > target_lum ? (k > 1 ? 1 : k) : (k - (1 / cutoff) < -1 ? 0 : k - (1 / cutoff) + 1);
-        res += (1 - (i + 0.5) / 8 * (1 - decay)) * LUT_water_scattering(mix(self_lum, target_lum, k));
+        res += LUT_water_scattering(mix(self_lum, target_lum, k));
     }
     res = res / 8 * (1 - decay);
     return res;
@@ -238,7 +238,7 @@ void main() {
             texture2D(noisetex, fract((world_coord_w.xz + frameTimeCounter * 3 * nd4) / 128)).rgb +
             texture2D(noisetex, fract((world_coord_w.xz + frameTimeCounter * 3 * nd5) / 128)).rgb - 3);
         old_normal_w = normal_w;
-        normal_w += 2 * offset;
+        normal_w += 0.5 * offset;
         normal_w = normalize(normal_w);
         float water_depth = dist_s - dist_w;
         water_depth = water_depth < 0 ? 0 : water_depth;
@@ -308,7 +308,7 @@ void main() {
                 if (reflect_dist > dist - 1e-3 / k && reflect_dist < dist + 1e-3 / k && abs(dist - texture2D(gaux4, nearest(screen_coord.st)).x) < 10) {
                     hit_w = 1;
                     reflect_texcoord_w = screen_coord.st;
-                    reflect_dist_w = reflect_dist;
+                    reflect_dist_w = t + t_step;
                     break;
                 }
                 else {
@@ -384,7 +384,7 @@ void main() {
                 if (reflect_dist > dist - 1e-3 / k && reflect_dist < dist + 1e-3 / k && abs(dist - texture2D(gaux4, nearest(screen_coord.st)).x) < 10) {
                     hit_g = 1;
                     reflect_texcoord_g = screen_coord.st;
-                    reflect_dist_g = reflect_dist;
+                    reflect_dist_g = t + t_step;
                     break;
                 }
                 else {
@@ -410,7 +410,7 @@ void main() {
     depth_s = texture2D(gdepth, texcoord_s).x;
     block_id_s = texture2D(gnormal, texcoord_s).w;
     sky_light_s = texture2D(gaux3, texcoord_s).y;
-    dist_s = block_id_s > 0.5 ? texture2D(gaux4, texcoord_s).x : FOG_AIR_THICKNESS;
+    dist_s = texture2D(gaux4, texcoord_s).x;
     if (isEyeInWater == 0) {
         if (depth_w < 1.5 && !(isEyeInWater == 1 && depth_g < depth_w)) {
             vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
@@ -460,7 +460,7 @@ void main() {
             }
         }
         else {
-            color_s = mix(fog_color, color_s, fog(dist_s, FOG_AIR_DECAY));
+            color_s = mix(fog_color, color_s, fog(block_id_s > 0.5 ? dist_s : FOG_AIR_THICKNESS, FOG_AIR_DECAY));
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
                 color_g = color_data_g.rgb;
@@ -489,20 +489,24 @@ void main() {
         float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_dir.y);
         vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sunmoon_light_mix);
         if (depth_w < 1.5 && !(isEyeInWater == 1 && depth_g < depth_w)) {
-            color_s = mix(fog_color, color_s, fog(dist_s - dist_w, FOG_AIR_DECAY));
-            k = fog(dist_w, FOG_WATER_DECAY);
+            color_s = mix(fog_color, color_s, fog(block_id_s > 0.5 ? dist_s - dist_w : FOG_AIR_THICKNESS, FOG_AIR_DECAY));
+            float k_w = fog(dist_w, FOG_WATER_DECAY);
             float y_w = view_coord_to_world_coord(view_coord_w).y;
-            color_s = k * color_s + sunmoon_light * cal_water_color(eye_brightness, sky_light_w, y_w, k);
-            // if (hit_w == 1) {
-            //     reflect_color_w = texture2D(gcolor, reflect_texcoord_w).rgb;
-            //     reflect_color_w = mix(fog_color, reflect_color_w, fog(reflect_dist_w, FOG_AIR_DECAY));
-            // }
-            // else {
-            //     vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_w * 100));
-            //     reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * LUT_sky(ray_dir);
-            //     reflect_color_w += SKY_ILLUMINATION_INTENSITY / fr_w * sky_light_w * cal_sun_bloom(ray_dir, sun_dir);
-            //     reflect_color_w = mix(fog_color, reflect_color_w, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
-            // }
+            vec3 scatter_w = cal_water_color(eye_brightness, sky_light_w, y_w, k_w);
+            color_s = k_w * color_s + sunmoon_light * scatter_w;
+            vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_w * 100));
+            if (hit_w == 1) {
+                reflect_color_w = texture2D(gcolor, reflect_texcoord_w).rgb;
+                reflect_sky_light_w = texture2D(gaux3, reflect_texcoord_w).y;
+                k = fog(reflect_dist_w, FOG_WATER_DECAY);
+                float y_diff = reflect_dist_w * ray_dir.y;
+                reflect_color_w = k * reflect_color_w + sunmoon_light * sky_light_w * cal_water_color(sky_light_w, reflect_sky_light_w, y_diff, k);
+            }
+            else {
+                k = fog(FOG_WATER_THICKNESS / abs(ray_dir.y), FOG_WATER_DECAY);
+                reflect_color_w = sunmoon_light * sky_light_w / (1 - k) * cal_water_color(sky_light_w, 0, FOG_WATER_THICKNESS, k);
+            }
+            reflect_color_w = k_w * reflect_color_w + sunmoon_light * scatter_w;
             // if (depth_g < 1.5) {
             //     color_data_g = texture2D(composite, texcoord_g);
             //     color_g = color_data_g.rgb;
@@ -531,25 +535,23 @@ void main() {
         }
         else {
             k = fog(dist_s, FOG_WATER_DECAY);
-            float y_s = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord_s, depth_s))).y;
-            color_s = k * color_s + sunmoon_light * cal_water_color(eye_brightness, sky_light_s, y_s, k);
+            float y_s = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord_s, block_id_s > 0.5 ? depth_s : 1))).y;
+            color_s = k * color_s + sunmoon_light * cal_water_color(eye_brightness, block_id_s > 0.5 ? sky_light_s : clamp(eye_brightness + y_s / 15, 0, 1) , y_s, k);
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
                 color_g = color_data_g.rgb;
                 alpha = color_data_g.a;
                 alpha = (1 - fr_g) * alpha + fr_g;
+                vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
                 if (hit_g == 1) {
                     reflect_color_g = texture2D(gcolor, reflect_texcoord_g).rgb;
-                    reflect_sky_light_g = texture2D(gaux3, reflect_texcoord_g).w;
+                    reflect_sky_light_g = texture2D(gaux3, reflect_texcoord_g).y;
                     k = fog(reflect_dist_g, FOG_WATER_DECAY);
-                    vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
                     float y_diff = reflect_dist_g * ray_dir.y;
                     reflect_color_g = k * reflect_color_g + sunmoon_light * sky_light_g * cal_water_color(sky_light_g, reflect_sky_light_g, y_diff, k);
                 }
                 else {
-                    vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
                     k = fog(FOG_WATER_THICKNESS / abs(ray_dir.y), FOG_WATER_DECAY);
-                    float y_diff = reflect_dist_g * ray_dir.y;
                     reflect_color_g = sunmoon_light * sky_light_g / (1 - k) * cal_water_color(sky_light_g, 1, FOG_WATER_THICKNESS, k);
                 }
                 color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
