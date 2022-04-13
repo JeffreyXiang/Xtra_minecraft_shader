@@ -202,14 +202,14 @@ void main() {
     // vec3 block_id_g = vec3(texture2D(gaux4, texcoord).z);
 
     /* composite0-3 */
-    vec3 color_s = pow(vec3(texture2D(gcolor, texcoord).rgb), vec3(1/2.2));
+    vec3 color_s = vec3(texture2D(gcolor, texcoord).rgb);
     vec3 ao = vec3(texture2D(gcolor, texcoord).a);
     vec3 depth_s = vec3(texture2D(gdepth, texcoord).x);
     vec3 depth_w = vec3(texture2D(gdepth, texcoord).y);
     vec3 depth_g = vec3(texture2D(gdepth, texcoord).z);
     vec3 normal_s = vec3(texture2D(gnormal, texcoord).rgb * 0.5 + 0.5);
     vec3 block_id_s = vec3(texture2D(gnormal, texcoord).a / 2);
-    vec3 color_g = pow(vec3(texture2D(composite, texcoord).rgb), vec3(1/2.2));
+    vec3 color_g = vec3(texture2D(composite, texcoord).rgb);
     vec3 alpha = vec3(texture2D(composite, texcoord).a);
     vec3 normal_w = vec3(texture2D(gaux1, texcoord).rgb * 0.5 + 0.5);
     vec3 normal_g = vec3(texture2D(gaux2, texcoord).rgb * 0.5 + 0.5);

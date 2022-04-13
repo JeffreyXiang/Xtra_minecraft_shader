@@ -16,6 +16,7 @@
 #define BLOCK_ILLUMINATION_PHYSICAL_INTENSITY 3.0   //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
 #define BLOCK_ILLUMINATION_PHYSICAL_CLOSEST 0.5    //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define SKY_ILLUMINATION_INTENSITY 3.0  //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
+#define SUN_LIGHT_INTENSITY 7
 #define BASE_ILLUMINATION_INTENSITY 0.01  //[0.001 0.002 0.005 0.01 0.02 0.05 0.1]
 
 #define SSAO_ENABLE 1 // [0 1]
@@ -146,7 +147,7 @@ vec3 cal_sky_color(vec3 ray_dir, vec3 sun_dir) {
 
     float cos_theta = dot(ray_dir, sun_dir);
     if (cos_theta >= min_sun_cos_theta) {
-        color += 5 * LUT_sun_color(ray_dir);
+        color += LUT_sun_color(ray_dir);
     }
     else {
         float offset = min_sun_cos_theta - cos_theta;
@@ -241,7 +242,7 @@ void main() {
         vec3 world_coord = view_coord_to_world_coord(view_coord);
         vec3 ray_dir = normalize(world_coord);
         vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
-        color_s = cal_sky_color(ray_dir, sun_dir);
+        color_s = SUN_LIGHT_INTENSITY * cal_sky_color(ray_dir, sun_dir);
         color_s *= SKY_ILLUMINATION_INTENSITY;
     }
 

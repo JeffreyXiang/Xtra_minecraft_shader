@@ -12,11 +12,13 @@
 #define WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
 
 uniform sampler2D gcolor;
-uniform sampler2D gdepth;
+uniform sampler2D gaux4;
 uniform sampler2D colortex8;
 
+uniform mat4 gbufferModelViewInverse;
+
 uniform ivec2 eyeBrightnessSmooth;
-uniform float sunAngle;
+uniform vec3 sunPosition;
 uniform float viewWidth;
 uniform float viewHeight;
 uniform float far;
@@ -29,6 +31,11 @@ vec2 offset(vec2 ori) {
     return vec2(ori.x / viewWidth, ori.y / viewHeight);
 }
 
+vec3 view_coord_to_world_coord(vec3 view_coord) {
+    vec3 world_coord = (gbufferModelViewInverse * vec4(view_coord, 1.0)).xyz;
+    return world_coord;
+}
+
 float fog(float dist, float decay) {
     dist = dist < 0 ? 0 : dist;
     dist = dist * decay / 16 + 1;
@@ -39,34 +46,44 @@ float fog(float dist, float decay) {
     return 1 / dist;
 }
 
+vec3 jodieReinhardTonemap(vec3 c){
+    // From: https://www.shadertoy.com/view/tdSXzD
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 tc = c / (c + 1.0);
+    return mix(c / (l + 1.0), tc, tc);
+}
+
 /* DRAWBUFFERS: 0 */
 void main() {
     vec3 color = texture2D(gcolor, texcoord).rgb;
 
-    float sun_angle = sunAngle < 0.5 ? 0.5 - 2 * abs(sunAngle - 0.25) : 0;
-    float sky_light_mix = smoothstep(0, 0.02, sun_angle);
-    float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(0.005, 1, sky_light_mix);
+    vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
+    float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_dir.y);
+    float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(0.005, 1, sunmoon_light_mix);
 
     /* EXPOSURE ADJUST */
     float eye_brightness = sky_brightness * (eyeBrightnessSmooth.y) / 240.0;
-    color *= clamp(2 / eye_brightness, 0, 1);
+    color *= clamp(2 / eye_brightness, 0, 3);
 
+    /* TONEMAP */
+    color = jodieReinhardTonemap(color);
+    
     /* GAMMA */
     color = pow(color, vec3(1 / GAMMA));
 
 #if OUTLINE_ENABLE
-    float dist = texture2D(gdepth, texcoord).x;
+    float dist = texture2D(gaux4, texcoord).x;
     if (dist < far) {
         /* OUTLINE */
-        float depth00 = log(texture2D(gdepth, texcoord + offset(vec2(-OUTLINE_WIDTH, -OUTLINE_WIDTH))).x);
-        float depth01 = log(texture2D(gdepth, texcoord + offset(vec2(0, -OUTLINE_WIDTH))).x);
-        float depth02 = log(texture2D(gdepth, texcoord + offset(vec2(OUTLINE_WIDTH, -OUTLINE_WIDTH))).x);
-        float depth10 = log(texture2D(gdepth, texcoord + offset(vec2(-OUTLINE_WIDTH, 0))).x);
-        float depth11 = log(texture2D(gdepth, texcoord + offset(vec2(0, 0))).x);
-        float depth12 = log(texture2D(gdepth, texcoord + offset(vec2(OUTLINE_WIDTH, 0))).x);
-        float depth20 = log(texture2D(gdepth, texcoord + offset(vec2(-OUTLINE_WIDTH, OUTLINE_WIDTH))).x);
-        float depth21 = log(texture2D(gdepth, texcoord + offset(vec2(0, OUTLINE_WIDTH))).x);
-        float depth22 = log(texture2D(gdepth, texcoord + offset(vec2(OUTLINE_WIDTH, OUTLINE_WIDTH))).x);
+        float depth00 = log(texture2D(gaux4, texcoord + offset(vec2(-OUTLINE_WIDTH, -OUTLINE_WIDTH))).x);
+        float depth01 = log(texture2D(gaux4, texcoord + offset(vec2(0, -OUTLINE_WIDTH))).x);
+        float depth02 = log(texture2D(gaux4, texcoord + offset(vec2(OUTLINE_WIDTH, -OUTLINE_WIDTH))).x);
+        float depth10 = log(texture2D(gaux4, texcoord + offset(vec2(-OUTLINE_WIDTH, 0))).x);
+        float depth11 = log(texture2D(gaux4, texcoord + offset(vec2(0, 0))).x);
+        float depth12 = log(texture2D(gaux4, texcoord + offset(vec2(OUTLINE_WIDTH, 0))).x);
+        float depth20 = log(texture2D(gaux4, texcoord + offset(vec2(-OUTLINE_WIDTH, OUTLINE_WIDTH))).x);
+        float depth21 = log(texture2D(gaux4, texcoord + offset(vec2(0, OUTLINE_WIDTH))).x);
+        float depth22 = log(texture2D(gaux4, texcoord + offset(vec2(OUTLINE_WIDTH, OUTLINE_WIDTH))).x);
 
         /* _SOBEL */
         // float sobel_h = -1 * depth00 + 1 * depth02 - 2 * depth10 + 2 * depth12 - 1 * depth20 + 1 * depth22;

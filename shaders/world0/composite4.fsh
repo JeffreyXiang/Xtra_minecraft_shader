@@ -5,6 +5,7 @@
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
 #define SKY_ILLUMINATION_INTENSITY 3.0  //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
+#define SUN_LIGHT_INTENSITY 7
 
 #define SSR_STEP_MAX_ITER 36
 #define SSR_DIV_MAX_ITER 6
@@ -173,7 +174,7 @@ vec3 cal_sun_bloom(vec3 ray_dir, vec3 sun_dir) {
 
     float cos_theta = dot(ray_dir, sun_dir);
     if (cos_theta >= min_sun_cos_theta) {
-        color += 5 * LUT_sun_color(ray_dir);
+        color += LUT_sun_color(ray_dir);
     }
     else {
         float offset = min_sun_cos_theta - cos_theta;
@@ -185,7 +186,7 @@ vec3 cal_sun_bloom(vec3 ray_dir, vec3 sun_dir) {
     return color;
 }
 
-/* DRAWBUFFERS: 0 */
+/* DRAWBUFFERS: 08 */
 void main() {
     vec3 color_s;
     float block_id_s, sky_light_s;
@@ -429,25 +430,25 @@ void main() {
             }
             else {
                 vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_w * 100));
-                reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * LUT_sky(ray_dir);
-                reflect_color_w += SKY_ILLUMINATION_INTENSITY / fr_w * sky_light_w * cal_sun_bloom(ray_dir, sun_dir);
+                reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * SUN_LIGHT_INTENSITY * LUT_sky(ray_dir);
+                reflect_color_w += SKY_ILLUMINATION_INTENSITY / fr_w * sky_light_w * SUN_LIGHT_INTENSITY * cal_sun_bloom(ray_dir, sun_dir);
                 reflect_color_w = mix(fog_color, reflect_color_w, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
             }
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
-                color_g = color_data_g.rgb;
+                color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
                 alpha = color_data_g.a;
                 alpha = (1 - fr_g) * alpha + fr_g;
                 if (depth_w > depth_g) {
                     if (hit_g == 1) {
-                    reflect_color_g = texture2D(gcolor, reflect_texcoord_g).rgb;
-                    reflect_color_g = mix(fog_color, reflect_color_g, fog(reflect_dist_g, FOG_AIR_DECAY));
+                        reflect_color_g = texture2D(gcolor, reflect_texcoord_g).rgb;
+                        reflect_color_g = mix(fog_color, reflect_color_g, fog(reflect_dist_g, FOG_AIR_DECAY));
                     }
                     else {
                         vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
                         vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
-                        reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
-                        reflect_color_g += SKY_ILLUMINATION_INTENSITY / fr_g * sky_light_g * cal_sun_bloom(ray_dir, sun_dir);
+                        reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * SUN_LIGHT_INTENSITY * LUT_sky(ray_dir);
+                        reflect_color_g += SKY_ILLUMINATION_INTENSITY / fr_g * sky_light_g * SUN_LIGHT_INTENSITY * cal_sun_bloom(ray_dir, sun_dir);
                         reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
                     }
                     color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
@@ -463,7 +464,7 @@ void main() {
             color_s = mix(fog_color, color_s, fog(block_id_s > 0.5 ? dist_s : FOG_AIR_THICKNESS, FOG_AIR_DECAY));
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
-                color_g = color_data_g.rgb;
+                color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
                 alpha = color_data_g.a;
                 alpha = (1 - fr_g) * alpha + fr_g;
                 if (hit_g == 1) {
@@ -473,8 +474,8 @@ void main() {
                 else {
                     vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
                     vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
-                    reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
-                    reflect_color_g += SKY_ILLUMINATION_INTENSITY / fr_g * sky_light_g * cal_sun_bloom(ray_dir, sun_dir);
+                    reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * SUN_LIGHT_INTENSITY * LUT_sky(ray_dir);
+                    reflect_color_g += SKY_ILLUMINATION_INTENSITY / fr_g * sky_light_g * SUN_LIGHT_INTENSITY * cal_sun_bloom(ray_dir, sun_dir);
                     reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
                 }
                 color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
@@ -507,31 +508,12 @@ void main() {
                 reflect_color_w = sunmoon_light * sky_light_w / (1 - k) * cal_water_color(sky_light_w, 0, FOG_WATER_THICKNESS, k);
             }
             reflect_color_w = k_w * reflect_color_w + sunmoon_light * scatter_w;
-            // if (depth_g < 1.5) {
-            //     color_data_g = texture2D(composite, texcoord_g);
-            //     color_g = color_data_g.rgb;
-            //     alpha = color_data_g.a;
-            //     alpha = (1 - fr_g) * alpha + fr_g;
-            //     if (depth_w > depth_g) {
-            //         if (hit_g == 1) {
-            //         reflect_color_g = texture2D(gcolor, reflect_texcoord_g).rgb;
-            //         reflect_color_g = mix(fog_color, reflect_color_g, fog(reflect_dist_g, FOG_AIR_DECAY));
-            //         }
-            //         else {
-            //             vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
-            //             vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
-            //             reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
-            //             reflect_color_g += SKY_ILLUMINATION_INTENSITY / fr_g * sky_light_g * cal_sun_bloom(ray_dir, sun_dir);
-            //             reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
-            //         }
-            //         color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
-            //         color_g = mix(alpha * fog_color, color_g, fog(dist_g, FOG_AIR_DECAY));
-            //     }
-            //     else {
-            //         k = fog(dist_g - dist_w, FOG_WATER_DECAY);
-            //         color_g = k * color_g + alpha * sunmoon_light * sky_light_w * cal_water_color(sky_light_w, sky_light_s, y_w - y_s, k);
-            //     }
-            // }
+            if (depth_g < 1.5) {
+                color_data_g = texture2D(composite, texcoord_g);
+                color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
+                alpha = color_data_g.a;
+                color_g = k_w * color_g + alpha * sunmoon_light * scatter_w;
+            }
         }
         else {
             k = fog(dist_s, FOG_WATER_DECAY);
@@ -539,7 +521,7 @@ void main() {
             color_s = k * color_s + sunmoon_light * cal_water_color(eye_brightness, block_id_s > 0.5 ? sky_light_s : clamp(eye_brightness + y_s / 15, 0, 1) , y_s, k);
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
-                color_g = color_data_g.rgb;
+                color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
                 alpha = color_data_g.a;
                 alpha = (1 - fr_g) * alpha + fr_g;
                 vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
@@ -561,9 +543,23 @@ void main() {
             }
         }
     }
+
+    /* BLOOM EXTRACT */
+    vec3 bloom_color = vec3(0.0);
+    if (block_id_s > 1.5) {
+        bloom_color = pow((1 - alpha) * (1 - fr_w) * color_s, vec3(1 / GAMMA));
+        bloom_color = mix(vec3(0.0), bloom_color, smoothstep(0.4, 0.6, grayscale(bloom_color)));
+    }
+    else if (block_id_s > 0.5){
+        bloom_color = pow((1 - alpha) * (1 - fr_w) * color_s, vec3(1 / GAMMA));
+        bloom_color = 0.5 * mix(vec3(0.0), bloom_color, smoothstep(1.5, 2, grayscale(bloom_color)));
+    }
+
+
     if (depth_w > depth_g)
         color_s = (1 - alpha) * (1 - fr_w) * color_s + color_g + (1 - alpha) * fr_w * reflect_color_w;
     else
         color_s = (1 - alpha) * (1 - fr_w) * color_s + (1 - fr_w) * color_g + fr_w * reflect_color_w;
     gl_FragData[0] = vec4(color_s, 1.0);
+    gl_FragData[1] = vec4(bloom_color, 1.0);
 }
