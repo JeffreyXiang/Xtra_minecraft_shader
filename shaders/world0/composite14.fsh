@@ -2,7 +2,11 @@
 
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
-#define SKY_ILLUMINATION_INTENSITY 3.0  //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
+#define MOON_INTENSITY 2.533e-6
+#define SUN_SRAD 2.101e4
+#define MOON_SRAD 2.101e4
+
+#define SKY_ILLUMINATION_INTENSITY 20.0  //[5.0 10.0 15.0 20.0 25.0 30.0 35.0 40.0 45.0 50.0]
 
 #define OUTLINE_ENABLE 1 // [0 1]
 #define OUTLINE_WIDTH 1
@@ -59,11 +63,11 @@ void main() {
 
     vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
     float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_dir.y);
-    float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(0.005, 1, sunmoon_light_mix);
+    float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(MOON_INTENSITY, 1, sunmoon_light_mix);
 
     /* EXPOSURE ADJUST */
-    float eye_brightness = sky_brightness * (eyeBrightnessSmooth.y) / 240.0;
-    color *= clamp(2 / eye_brightness, 0, 3);
+    float eye_brightness = sky_brightness * (isEyeInWater == 1 ? 1 : eyeBrightnessSmooth.y / 240.0);
+    color *= clamp(1 / eye_brightness, 0.25, 3);
 
     /* TONEMAP */
     color = jodieReinhardTonemap(color);

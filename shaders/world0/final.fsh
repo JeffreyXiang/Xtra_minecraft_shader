@@ -157,6 +157,7 @@ const int colortex15Format = RGBA32F;
 const int shadowMapResolution = 4096;   //[1024 2048 4096] 
 const int noiseTextureResolution = 256;
 const float	sunPathRotation	= -30.0;
+const float ambientOcclusionLevel = 0.0f;
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
