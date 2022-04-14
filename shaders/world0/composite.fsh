@@ -147,7 +147,7 @@ void main() {
         if (gi_block_id_s > 0.5) {
             vec3 gi_screen_coord = vec3(gi_texcoord, texture2D(depthtex1, gi_texcoord).x);
             vec3 gi_view_coord = screen_coord_to_view_coord(gi_screen_coord);
-            vec2 previous_texcoord = view_coord_to_previous_screen_coord(gi_view_coord).st;
+            vec2 previous_texcoord = (view_coord_to_previous_screen_coord(gi_view_coord).st - 0.5) / GI_RES_SCALE + 0.5;
             if (previous_texcoord.s > 0 && previous_texcoord.s < 1 && previous_texcoord.t > 0 && previous_texcoord.t < 1) {
                 has_previous = 1;
                 vec4 gi_data = texture2D(colortex9, previous_texcoord);
