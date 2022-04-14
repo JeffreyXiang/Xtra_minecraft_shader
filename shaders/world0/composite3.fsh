@@ -22,7 +22,7 @@
 #define BASE_ILLUMINATION_INTENSITY 0.01  //[0.001 0.002 0.005 0.01 0.02 0.05 0.1]
 
 #define SSAO_ENABLE 1 // [0 1]
-#define SSAO_RES_SCALE 0.5   //[0.25 0.5 1]
+#define GI_RES_SCALE 0.5   //[0.25 0.5 1]
 
 #define FOG_AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01 0.02 0.05]
 #define FOG_THICKNESS 256
@@ -33,6 +33,7 @@ uniform sampler2D gdepth;
 uniform sampler2D gnormal;
 uniform sampler2D gaux3;
 uniform sampler2D gaux4;
+uniform sampler2D colortex9;
 uniform sampler2D colortex15;
 uniform sampler2D shadowtex0;
 uniform sampler2D shadowtex1;
@@ -239,8 +240,8 @@ void main() {
         sunmoon_light *= (1 - sun_light_shadow) * SHADOW_INTENSITY * k;
         color_s *= block_light + sky_light + sunmoon_light + BASE_ILLUMINATION_INTENSITY;
         #if SSAO_ENABLE         // SSAO
-            vec2 ssao_texcoord = (texcoord - 0.5) * SSAO_RES_SCALE + 0.5;
-            float ao = texture2D(gcolor, ssao_texcoord).w;
+            vec2 ssao_texcoord = (texcoord - 0.5) * GI_RES_SCALE + 0.5;
+            float ao = texture2D(colortex9, ssao_texcoord).w;
             color_s *= ao;
         #endif
     }
