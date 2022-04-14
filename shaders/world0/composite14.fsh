@@ -67,7 +67,7 @@ void main() {
 
     /* EXPOSURE ADJUST */
     float eye_brightness = sky_brightness * (isEyeInWater == 1 ? 1 : eyeBrightnessSmooth.y / 240.0);
-    color *= clamp(1 / eye_brightness, 0.25, 3);
+    color *= clamp(5 / eye_brightness, 0.25, 10);
 
     /* TONEMAP */
     color = jodieReinhardTonemap(color);

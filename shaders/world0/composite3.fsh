@@ -5,7 +5,7 @@
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
 #define SHADOW_EPSILON 1e-1
-#define SHADOW_INTENSITY 0.5    // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
+#define SHADOW_INTENSITY 0.95    // [0.5 0.6 0.7 0.75 0.8 0.85 0.9 0.925 0.95 0.975 1.0]
 #define SHADOW_FISHEY_LENS_INTENSITY 0.85
 
 #define ILLUMINATION_EPSILON 0.5

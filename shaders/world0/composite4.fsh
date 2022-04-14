@@ -245,7 +245,7 @@ void main() {
         normal_w = normalize(normal_w);
         float water_depth = dist_s - dist_w;
         water_depth = water_depth < 0 ? 0 : water_depth;
-        vec2 texcoord_ = texcoord - 0.1 * water_depth / dist_s * offset.xy;
+        vec2 texcoord_ = texcoord - 0.3 * water_depth / dist_s * offset.xy;
         if (texture2D(gdepth, texcoord_).y < 1.5) {
             texcoord_s = texcoord_;
         }
