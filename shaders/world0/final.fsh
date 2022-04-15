@@ -81,12 +81,12 @@ _w: water
      |               |         | a |                  |                  |                  |
 ---------------------------------------------------------------------------------------------
      |               |         | r |                  |                  |                  |
-     |               |         |-----------------------------------------|                  |
-     |               |         | g |                  |                  |        gi        |
-  9  |   colortex9   | RGBA16F |-----------------------------------------|                  |
+     |               |         |----------------------|                  |                  |
+     |               |         | g |                  |        gi        |        gi        |
+  9  |   colortex9   | RGBA16F |----------------------|                  |                  |
      |               |         | b |                  |                  |                  |
      |               |         |-------------------------------------------------------------
-     |               |         | a |                  |        ao        |        ao        |
+     |               |         | a |                  |     depth_s      |     depth_s      |
 ---------------------------------------------------------------------------------------------
      |               |         | r |                  |                  |                  |
      |               |         |-------------------------------------------------------------
@@ -206,7 +206,7 @@ void main() {
 
     /* composite0-3 */
     vec3 color_s = vec3(texture2D(gcolor, texcoord).rgb);
-    vec3 ao = vec3(texture2D(colortex9, texcoord).a);
+    vec3 gi = vec3(texture2D(colortex9, texcoord).rgb);
     vec3 depth_s = vec3(texture2D(gdepth, texcoord).x);
     vec3 depth_w = vec3(texture2D(gdepth, texcoord).y);
     vec3 depth_g = vec3(texture2D(gdepth, texcoord).z);
@@ -252,5 +252,5 @@ void main() {
     // vec3 texture_color = texture2D(colortex15, texcoord).rgb;
     // vec3 noise = texture2D(noisetex, texcoord).rgb;
 
-    gl_FragData[0] = vec4(color_s, 1.0);
+    gl_FragData[0] = vec4(gi, 1.0);
 }

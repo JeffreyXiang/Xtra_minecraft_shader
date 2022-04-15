@@ -135,9 +135,8 @@ void main() {
     color_s = pow(color_s, vec3(GAMMA));
     color_g = pow(color_g, vec3(GAMMA));
 
-    vec3 gi = vec3(0.0);
-    float ao = 1;
-#if SSAO_ENABLE && GI_TEMOPORAL_FILTER
+    vec3 gi = vec3(1.0);
+#if SSAO_ENABLE || GI_TEMOPORAL_FILTER
     int has_previous = 0;
     vec2 gi_texcoord = (texcoord - 0.5) / GI_RES_SCALE + 0.5;
     if (gi_texcoord.x > 0 && gi_texcoord.x < 1 && gi_texcoord.y > 0 && gi_texcoord.y < 1) {
@@ -147,13 +146,17 @@ void main() {
         if (gi_block_id_s > 0.5) {
             vec3 gi_screen_coord = vec3(gi_texcoord, texture2D(depthtex1, gi_texcoord).x);
             vec3 gi_view_coord = screen_coord_to_view_coord(gi_screen_coord);
-            vec2 previous_texcoord = view_coord_to_previous_screen_coord(gi_view_coord).st;
-            if (previous_texcoord.s > 0 && previous_texcoord.s < 1 && previous_texcoord.t > 0 && previous_texcoord.t < 1) {
-                has_previous = 1;
-                vec4 gi_data = texture2D(colortex9, (previous_texcoord - 0.5) * GI_RES_SCALE + 0.5);
-                gi = gi_data.rgb;
-                ao = gi_data.a;
-            }
+            #if GI_TEMOPORAL_FILTER
+                vec3 previous_texcoord = view_coord_to_previous_screen_coord(gi_view_coord).xyz;
+                if (previous_texcoord.s > 0 && previous_texcoord.s < 1 && previous_texcoord.t > 0 && previous_texcoord.t < 1) {
+                    vec4 gi_data = texture2D(colortex9, (previous_texcoord.st - 0.5) * GI_RES_SCALE + 0.5);
+                    float previous_depth_s = gi_data.a;
+                    if (previous_texcoord.z > previous_depth_s - 1e-3 && previous_texcoord.z < previous_depth_s + 1e-3) {
+                        has_previous = 1;
+                        gi = gi_data.rgb;
+                    }
+                }
+            #endif
             #if SSAO_ENABLE
                 /* SSAO */
                 float ssao_dist_s = length(gi_view_coord), ao_;
@@ -181,10 +184,10 @@ void main() {
                     ao_ = pow(ao_, GAMMA);
                     ao_ = clamp(ao_, 0, 1);
                     #if GI_TEMOPORAL_FILTER
-                        if (has_previous == 1) ao = (1 - GI_TEMOPORAL_FILTER_K) * ao + GI_TEMOPORAL_FILTER_K * ao_;
-                        else ao = ao_;
+                        if (has_previous == 1) gi = (1 - GI_TEMOPORAL_FILTER_K) * gi + GI_TEMOPORAL_FILTER_K * ao_;
+                        else gi = vec3(ao_);
                     #else
-                        ao = ao_;
+                        gi = vec3(ao_);
                     #endif
                 }
             #endif
@@ -203,7 +206,7 @@ void main() {
     gl_FragData[2] = vec4(color_g, alpha);
     gl_FragData[3] = vec4(block_light_s, sky_light_s, sky_light_w, sky_light_g);
     gl_FragData[4] = vec4(dist_s, dist_w, dist_g, 0.0);
-    gl_FragData[5] = vec4(gi, ao);
+    gl_FragData[5] = vec4(gi, depth_s);
     gl_FragData[6] = LUT_data;
 
 }

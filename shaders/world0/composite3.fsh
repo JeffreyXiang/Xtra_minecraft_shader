@@ -241,8 +241,8 @@ void main() {
         color_s *= block_light + sky_light + sunmoon_light + BASE_ILLUMINATION_INTENSITY;
         #if SSAO_ENABLE         // SSAO
             vec2 ssao_texcoord = (texcoord - 0.5) * GI_RES_SCALE + 0.5;
-            float ao = texture2D(colortex9, ssao_texcoord).w;
-            color_s *= ao;
+            vec3 gi = texture2D(colortex9, ssao_texcoord).rgb;
+            color_s *= gi;
         #endif
     }
     else { /* SKY */
