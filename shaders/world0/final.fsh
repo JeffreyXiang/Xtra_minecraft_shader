@@ -252,5 +252,5 @@ void main() {
     // vec3 texture_color = texture2D(colortex15, texcoord).rgb;
     // vec3 noise = texture2D(noisetex, texcoord).rgb;
 
-    gl_FragData[0] = vec4(gi, 1.0);
+    gl_FragData[0] = vec4(color_s, 1.0);
 }

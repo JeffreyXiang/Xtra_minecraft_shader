@@ -10,7 +10,7 @@
 
 #define SSAO_ENABLE 1 // [0 1]
 #define SSAO_DISTANCE 256
-#define SSAO_SAMPLE_NUM 32   //[4 8 16 32 64 128 256]
+#define SSAO_SAMPLE_NUM 32   //[1 2 4 8 16 32 64 128 256]
 #define SSAO_SAMPLE_RADIUS 0.5   //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define SSAO_INTENSITY 1.0   //[0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0]
 
@@ -149,11 +149,10 @@ void main() {
             #if GI_TEMOPORAL_FILTER
                 vec3 previous_texcoord = view_coord_to_previous_screen_coord(gi_view_coord).xyz;
                 if (previous_texcoord.s > 0 && previous_texcoord.s < 1 && previous_texcoord.t > 0 && previous_texcoord.t < 1) {
-                    vec4 gi_data = texture2D(colortex9, (previous_texcoord.st - 0.5) * GI_RES_SCALE + 0.5);
-                    float previous_depth_s = gi_data.a;
+                    float previous_depth_s = texture2D(colortex9, previous_texcoord.st).a;
                     if (previous_texcoord.z > previous_depth_s - 1e-3 && previous_texcoord.z < previous_depth_s + 1e-3) {
                         has_previous = 1;
-                        gi = gi_data.rgb;
+                        gi = texture2D(colortex9, (previous_texcoord.st - 0.5) * GI_RES_SCALE + 0.5).rgb;
                     }
                 }
             #endif
@@ -181,7 +180,6 @@ void main() {
                         if (ssao_sample.z > ssao_sample_depth && (ssao_sample.z - ssao_sample_depth) * ssao_dist_s < 0.02 * SSAO_SAMPLE_RADIUS) oc++;
                     }
                     ao_ = 1 - SSAO_INTENSITY * oc / SSAO_SAMPLE_NUM * (1 - smoothstep(SSAO_DISTANCE - 32, SSAO_DISTANCE, ssao_dist_s));
-                    ao_ = pow(ao_, GAMMA);
                     ao_ = clamp(ao_, 0, 1);
                     #if GI_TEMOPORAL_FILTER
                         if (has_previous == 1) gi = (1 - GI_TEMOPORAL_FILTER_K) * gi + GI_TEMOPORAL_FILTER_K * ao_;

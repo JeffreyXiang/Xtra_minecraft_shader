@@ -66,7 +66,8 @@ void main() {
     float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(MOON_INTENSITY, 1, sunmoon_light_mix);
 
     /* EXPOSURE ADJUST */
-    float eye_brightness = sky_brightness * (isEyeInWater == 1 ? 1 : eyeBrightnessSmooth.y / 240.0);
+    float eye_brightness = (isEyeInWater == 1 ? 1 : eyeBrightnessSmooth.y / 240.0);
+    eye_brightness = sky_brightness * eye_brightness * eye_brightness;
     color *= clamp(5 / eye_brightness, 0.25, 10);
 
     /* TONEMAP */

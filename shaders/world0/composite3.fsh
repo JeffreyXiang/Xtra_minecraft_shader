@@ -236,12 +236,13 @@ void main() {
         #endif
 
         k = fog(FOG_THICKNESS, FOG_AIR_DECAY);
-        sky_light *= (in_shadow > 0.5 ? sky_light_s : 1) * (1 - SHADOW_INTENSITY * k);
+        sky_light *= (in_shadow > 0.5 ? sky_light_s * sky_light_s : 1) * (1 - SHADOW_INTENSITY * k);
         sunmoon_light *= (1 - sun_light_shadow) * SHADOW_INTENSITY * k;
         color_s *= block_light + sky_light + sunmoon_light + BASE_ILLUMINATION_INTENSITY;
         #if SSAO_ENABLE         // SSAO
             vec2 ssao_texcoord = (texcoord - 0.5) * GI_RES_SCALE + 0.5;
             vec3 gi = texture2D(colortex9, ssao_texcoord).rgb;
+            gi = pow(gi, vec3(GAMMA));
             color_s *= gi;
         #endif
     }
