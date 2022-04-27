@@ -6,6 +6,7 @@
 
 #define SSAO_ENABLE 1 // [0 1]
 #define SSGI_ENABLE 1 // [0 1]
+#define GI_RES_SCALE 0.5   //[0.25 0.5 1]
 
 uniform sampler2D gcolor;
 uniform sampler2D gnormal;
@@ -18,7 +19,8 @@ varying vec2 texcoord;
 void main() {
     vec3 color_s = texture2D(gcolor, texcoord).rgb;
     float block_id_s = texture2D(gnormal, texcoord).a;
-    vec4 gi_data = texture2D(colortex9, texcoord);
+    vec2 gi_texcoord = (texcoord - 0.5) * GI_RES_SCALE + 0.5;
+    vec4 gi_data = texture2D(colortex9, gi_texcoord);
 
     /* APPPLY GI */
     if (block_id_s > 0.5) {

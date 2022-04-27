@@ -234,6 +234,7 @@ void main() {
             #endif
             #if SSGI_ENABLE
                 /* SSGI */
+                seed(gi_texcoord);
                 int gi_hit = 0;
                 vec2 gi_reflect_texcoord = vec2(0.0);
                 y = rand();
