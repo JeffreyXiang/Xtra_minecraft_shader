@@ -11,9 +11,9 @@
 #define OUTLINE_ENABLE 1 // [0 1]
 #define OUTLINE_WIDTH 1
 
-#define AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01]
+#define FOG_AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01]
 
-#define WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
+#define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
 
 uniform sampler2D gcolor;
 uniform sampler2D gaux4;
@@ -101,9 +101,9 @@ void main() {
         laplacian = smoothstep(0.1, 0.2, abs(laplacian));
 
         if (isEyeInWater == 1) 
-            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * WATER_DECAY)), 0, 100);
+            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * FOG_WATER_DECAY)), 0, 100);
         else
-            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * AIR_DECAY)), 0, 100);
+            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * FOG_AIR_DECAY)), 0, 100);
     }
 #endif
 

@@ -2,7 +2,7 @@
 
 #define PI 3.1415926535898
 
-#define FILTER_KERNEL_STRIDE 1
+#define FILTER_KERNEL_STRIDE 4
 
 #define SSAO_ENABLE 1 // [0 1]
 #define SSGI_ENABLE 1 // [0 1]
@@ -37,10 +37,10 @@ vec3 screen_coord_to_view_coord(vec3 screen_coord) {
 
 float kernel[] = float[](0.0625, 0.25, 0.375, 0.35, 0.0625);
 
-/* RENDERTARGETS: 9,10 */
+/* RENDERTARGETS: 9 */
 void main() {
     vec4 gi_data = texture2D(colortex9, texcoord);
-#if (SSAO_ENABLE || SSGI_ENABLE) && GI_SPATIAL_FILTER_ENABLE
+#if (SSAO_ENABLE || SSGI_ENABLE) && GI_SPATIAL_FILTER_ENABLE && GI_SPATIAL_FILTER_PASSES > 2
     /* GI CROSS BILATERAL */
     vec2 ssao_texcoord = (texcoord - 0.5) / GI_RES_SCALE + 0.5;
     if (ssao_texcoord.x > 0 && ssao_texcoord.x < 1 && ssao_texcoord.y > 0 && ssao_texcoord.y < 1) {
@@ -54,8 +54,8 @@ void main() {
         if (block_id_s_c > 0.5) {
             for (int i = 0; i < 5; i++) {
                 for (int j = 0; j < 5; j++) {
-                    clip_z_t = texture2D(gaux4, ssao_texcoord + FILTER_KERNEL_STRIDE * offset(FILTER_KERNEL_STRIDE * vec2(i - 2, j - 2)) / GI_RES_SCALE).w;
-                    normal_s_data = texture2D(gnormal, ssao_texcoord + FILTER_KERNEL_STRIDE * offset(FILTER_KERNEL_STRIDE * vec2(i - 2, j - 2)) / GI_RES_SCALE);
+                    clip_z_t = texture2D(gaux4, ssao_texcoord + offset(FILTER_KERNEL_STRIDE * vec2(i - 2, j - 2)) / GI_RES_SCALE).w;
+                    normal_s_data = texture2D(gnormal, ssao_texcoord + offset(FILTER_KERNEL_STRIDE * vec2(i - 2, j - 2)) / GI_RES_SCALE);
                     normal_s_t = normal_s_data.xyz;
                     block_id_s_t = normal_s_data.w;
                     if (block_id_s_t > 0.5) {
@@ -76,5 +76,4 @@ void main() {
     }
 #endif
     gl_FragData[0] = gi_data;
-    gl_FragData[1] = gi_data;
 }

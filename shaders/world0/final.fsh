@@ -70,12 +70,12 @@ _w: water
   7  |   gaux4       | RGBA32F |-------------------------------------------------------------
      |               |         | b |    block_id_g    |      dist_g      |      dist_g      |
      |               |         |-------------------------------------------------------------
-     |               |         | a |                  |                  |                  |
+     |               |         | a |                  |                  |      clip_z      |
 ---------------------------------------------------------------------------------------------
      |               |         | r |                  |                  |                  |
-     |               |         |-----------------------------------------|                  |
-     |               |         | g |                  |                  |      bloom       |
-  8  |   colortex8   | RGBA16F |-----------------------------------------|                  |
+     |               |         |----------------------|                  |                  |
+     |               |         | g |                  |     albedo_s     |      bloom       |
+  8  |   colortex8   | RGBA16F |----------------------|                  |                  |
      |               |         | b |                  |                  |                  |
      |               |         |-------------------------------------------------------------
      |               |         | a |                  |                  |                  |
@@ -86,23 +86,23 @@ _w: water
   9  |   colortex9   | RGBA16F |----------------------|                  |                  |
      |               |         | b |                  |                  |                  |
      |               |         |-------------------------------------------------------------
-     |               |         | a |                  |     depth_s      |     depth_s      |
+     |               |         | a |                  |        ao        |        ao        |
 ---------------------------------------------------------------------------------------------
      |               |         | r |                  |                  |                  |
-     |               |         |-------------------------------------------------------------
-     |               |         | g |                  |                  |                  |
-  10 |   colortex10  | RGBA16F |-------------------------------------------------------------
+     |               |         |---|                  |                  |                  |
+     |               |         | g |     gi_prev      |     gi_prev      |     gi_prev      |
+  10 |   colortex10  | RGBA16F |---|                  |                  |                  |
      |               |         | b |                  |                  |                  |
      |               |         |-------------------------------------------------------------
-     |               |         | a |                  |                  |                  |
+     |               |         | a |     ao_prev      |     ao_prev      |     ao_prev      |
 ---------------------------------------------------------------------------------------------
-     |               |         | r |                  |                  |                  |
+     |               |         | r |  in_shadow_prev  |  in_shadow_prev  |  in_shadow_prev  |
      |               |         |-------------------------------------------------------------
      |               |         | g |                  |                  |                  |
   11 |   colortex11  | RGBA16F |-------------------------------------------------------------
      |               |         | b |                  |                  |                  |
      |               |         |-------------------------------------------------------------
-     |               |         | a |                  |                  |                  |
+     |               |         | a |   depth_s_prev   |   depth_s_prev   |   depth_s_prev   |
 ---------------------------------------------------------------------------------------------
      |               |         | r |                  |                  |                  |
      |               |         |-------------------------------------------------------------
@@ -154,8 +154,11 @@ const int gaux3Format = RGBA16F;
 const int gaux4Format = RGBA32F;
 const int colortex8Format = RGBA16F;
 const int colortex9Format = RGBA16F;
+const int colortex10Format = RGBA16F;
+const int colortex11Format = RGBA16F;
 const int colortex15Format = RGBA32F;
-const bool colortex9Clear = false;
+const bool colortex10Clear = false;
+const bool colortex11Clear = false;
 const int shadowMapResolution = 4096;   //[1024 2048 4096] 
 const int noiseTextureResolution = 256;
 const float	sunPathRotation	= -30.0;
@@ -171,6 +174,8 @@ uniform sampler2D gaux3;
 uniform sampler2D gaux4;
 uniform sampler2D colortex8;
 uniform sampler2D colortex9;
+uniform sampler2D colortex10;
+uniform sampler2D colortex11;
 uniform sampler2D colortex15;
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
@@ -182,7 +187,7 @@ uniform float far;
 
 varying vec2 texcoord;
 
-/* DRAWBUFFERS: 0 */
+/* RENDERTARGETS: 0 */
 void main() {
     /* OUTPUT & DEBUG */
     vec3 color = texture2D(gcolor, texcoord).rgb;
@@ -207,6 +212,9 @@ void main() {
     /* composite0-3 */
     vec3 color_s = vec3(texture2D(gcolor, texcoord).rgb);
     vec3 gi = vec3(texture2D(colortex9, texcoord).rgb);
+    vec3 ao = vec3(texture2D(colortex9, texcoord).a);
+    vec3 gi_prev = vec3(texture2D(colortex10, texcoord).rgb);
+    vec3 ao_prev = vec3(texture2D(colortex10, texcoord).a);
     vec3 depth_s = vec3(texture2D(gdepth, texcoord).x);
     vec3 depth_w = vec3(texture2D(gdepth, texcoord).y);
     vec3 depth_g = vec3(texture2D(gdepth, texcoord).z);
@@ -252,5 +260,5 @@ void main() {
     // vec3 texture_color = texture2D(colortex15, texcoord).rgb;
     // vec3 noise = texture2D(noisetex, texcoord).rgb;
 
-    gl_FragData[0] = vec4(color_s, 1.0);
+    gl_FragData[0] = vec4(color, 1.0);
 }
