@@ -5,16 +5,16 @@
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
 #define GI_TEMOPORAL_FILTER 1 // [0 1]
-#define GI_TEMOPORAL_FILTER_K 0.1
-#define GI_RES_SCALE 0.5   //[0.25 0.5 1]
+#define GI_TEMOPORAL_FILTER_K 0.1 // [0.2 0.1 0.05 0.02 0.01]
+#define GI_RES_SCALE 0.5   // [0.25 0.5 1]
 #define SSGI_STEP_MAX_ITER 18
 #define SSGI_DIV_MAX_ITER 10
 
 #define SSAO_ENABLE 1 // [0 1]
 #define SSAO_DISTANCE 256
-#define SSAO_SAMPLE_NUM 32   //[1 2 4 8 16 32 64 128 256]
-#define SSAO_SAMPLE_RADIUS 0.5   //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
-#define SSAO_INTENSITY 1.0   //[0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0]
+#define SSAO_SAMPLE_NUM 32   // [1 2 4 8 16 32 64 128 256]
+#define SSAO_SAMPLE_RADIUS 0.5   // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
+#define SSAO_INTENSITY 1.0   // [0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0]
 
 #define SSGI_ENABLE 1 // [0 1]
 
