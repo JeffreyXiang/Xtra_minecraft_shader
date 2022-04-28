@@ -163,7 +163,7 @@ const int shadowMapResolution = 4096;   //[1024 2048 4096]
 const bool shadowHardwareFiltering1 = true; 
 const int noiseTextureResolution = 256;
 const float	sunPathRotation	= -30.0;
-const float ambientOcclusionLevel = 0.0f;
+const float ambientOcclusionLevel = 0.0;   //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;

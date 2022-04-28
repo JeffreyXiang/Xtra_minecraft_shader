@@ -17,8 +17,7 @@ const int shadowMapResolution = 4096;   //[1024 2048 4096]
 #define MOON_INTENSITY 2.533e-6
 #define SUN_SRAD 2.101e1
 
-#define BLOCK_ILLUMINATION_CLASSIC_INTENSITY 1.5    //[0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5]
-#define BLOCK_ILLUMINATION_PHYSICAL_INTENSITY 3.0   //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
+#define BLOCK_ILLUMINATION_INTENSITY 3.0   //[1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
 #define BLOCK_ILLUMINATION_PHYSICAL_CLOSEST 0.5    //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define SKY_ILLUMINATION_INTENSITY 20.0  //[5.0 10.0 15.0 20.0 25.0 30.0 35.0 40.0 45.0 50.0]
 #define BASE_ILLUMINATION_INTENSITY 0.01  //[0.001 0.002 0.005 0.01 0.02 0.05 0.1]
@@ -299,11 +298,11 @@ void main() {
         } 
 
         #if ILLUMINATION_MODE
-            vec3 block_light = BLOCK_ILLUMINATION_CLASSIC_INTENSITY * block_light_s * block_illumination_color;
+            vec3 block_light = BLOCK_ILLUMINATION_INTENSITY * block_light_s * block_illumination_color;
         #else
             float block_light_dist = block_id_s > 1.5 ? 0 : 13 - clamp(15 * block_light_s - 1, 0, 13);
             block_light_dist = (1 - ILLUMINATION_EPSILON) * block_light_dist + ILLUMINATION_EPSILON * block_light_dist / (13 - block_light_dist) + BLOCK_ILLUMINATION_PHYSICAL_CLOSEST;
-            vec3 block_light = BLOCK_ILLUMINATION_PHYSICAL_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * block_illumination_color;
+            vec3 block_light = BLOCK_ILLUMINATION_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * block_illumination_color;
         #endif
 
         k = fog(FOG_THICKNESS, FOG_AIR_DECAY);

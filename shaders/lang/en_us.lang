@@ -12,11 +12,8 @@ value.ILLUMINATION_MODE.1=Classic
 option.BLOCK_ILLUMINATION_COLOR_TEMPERATURE=Color Temperature
 option.BLOCK_ILLUMINATION_COLOR_TEMPERATURE.comment=Color temperature of block illumination. The lower the value, the warmer the light emitted by blocks. 
 
-option.BLOCK_ILLUMINATION_CLASSIC_INTENSITY=Classic Block Illumination Intensity
-option.BLOCK_ILLUMINATION_CLASSIC_INTENSITY.comment=Max intensity of <Classic> illumination Mode.
-
-option.BLOCK_ILLUMINATION_PHYSICAL_INTENSITY=Physical Block Illumination Intensity
-option.BLOCK_ILLUMINATION_PHYSICAL_INTENSITY.comment=Max intensity of <Physical> illumination Mode.
+option.BLOCK_ILLUMINATION_INTENSITY=Block Illumination Intensity
+option.BLOCK_ILLUMINATION_INTENSITY.comment=Max intensity of Block light.
 
 option.BLOCK_ILLUMINATION_PHYSICAL_CLOSEST=Physical Block Illumination Closest
 option.BLOCK_ILLUMINATION_PHYSICAL_CLOSEST.comment=Min distance of <Physical> illumination Mode. The higher the value, the larger the lightened area.

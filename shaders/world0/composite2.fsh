@@ -4,11 +4,9 @@
 
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
-#define GI_TEMOPORAL_FILTER 1 // [0 1]
+#define GI_TEMOPORAL_FILTER_ENABLE 1 // [0 1]
 #define GI_TEMOPORAL_FILTER_K 0.1 // [0.2 0.1 0.05 0.02 0.01]
 #define GI_RES_SCALE 0.5   // [0.25 0.5 1]
-#define SSGI_STEP_MAX_ITER 18
-#define SSGI_DIV_MAX_ITER 10
 
 #define SSAO_ENABLE 1 // [0 1]
 #define SSAO_DISTANCE 256
@@ -17,6 +15,8 @@
 #define SSAO_INTENSITY 1.0   // [0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0]
 
 #define SSGI_ENABLE 1 // [0 1]
+#define SSGI_STEP_MAX_ITER 18
+#define SSGI_DIV_MAX_ITER 10
 
 #define MOON_INTENSITY 2.533e-6
 #define SUN_SRAD 2.101e1
@@ -196,7 +196,7 @@ void main() {
         if (gi_block_id_s > 0.5) {
             vec3 gi_screen_coord = vec3(gi_texcoord, texture2D(depthtex1, gi_texcoord).x);
             vec3 gi_view_coord = screen_coord_to_view_coord(gi_screen_coord);
-            #if GI_TEMOPORAL_FILTER
+            #if GI_TEMOPORAL_FILTER_ENABLE
                 vec3 previous_texcoord = view_coord_to_previous_screen_coord(gi_view_coord).xyz;
                 if (previous_texcoord.s > 0 && previous_texcoord.s < 1 && previous_texcoord.t > 0 && previous_texcoord.t < 1) {
                     float previous_depth_s = texture2D(colortex11, previous_texcoord.st).a;
@@ -234,7 +234,7 @@ void main() {
                     }
                     ao_ = 1 - SSAO_INTENSITY * oc / SSAO_SAMPLE_NUM * (1 - smoothstep(SSAO_DISTANCE - 32, SSAO_DISTANCE, ssao_dist_s));
                     ao_ = clamp(ao_, 0, 1);
-                    #if GI_TEMOPORAL_FILTER
+                    #if GI_TEMOPORAL_FILTER_ENABLE
                         if (has_previous == 1) ao = (1 - GI_TEMOPORAL_FILTER_K) * ao + GI_TEMOPORAL_FILTER_K * ao_;
                         else ao = ao_;
                     #else
@@ -291,7 +291,7 @@ void main() {
                 if (gi_hit == 1) {
                     gi_reflect_color = texture2D(gcolor, gi_reflect_texcoord).rgb;
                 }
-                #if GI_TEMOPORAL_FILTER
+                #if GI_TEMOPORAL_FILTER_ENABLE
                     if (has_previous == 1) gi = (1 - GI_TEMOPORAL_FILTER_K) * gi + GI_TEMOPORAL_FILTER_K * gi_reflect_color;
                     else gi = GI_TEMOPORAL_FILTER_K * gi_reflect_color;
                 #else

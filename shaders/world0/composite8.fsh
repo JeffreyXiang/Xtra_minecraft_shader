@@ -408,7 +408,7 @@ void main() {
     /* LIGHT PROPAGATION */
     float k;
     float eye_brightness = eyeBrightnessSmooth.y / 240.;
-    vec3 fog_color = eye_brightness * fogColor;
+    vec3 fog_color = eye_brightness * fogColor * SKY_ILLUMINATION_INTENSITY / 4;
     color_s = texture2D(gcolor, texcoord_s).rgb;
     depth_s = texture2D(gdepth, texcoord_s).x;
     block_id_s = texture2D(gnormal, texcoord_s).w;
@@ -436,6 +436,7 @@ void main() {
                 reflect_color_w += SKY_ILLUMINATION_INTENSITY * sky_light_w / fr_w * cal_sun_bloom(ray_dir, sun_dir);
                 reflect_color_w = mix(fog_color, reflect_color_w, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
             }
+            reflect_color_w = mix(fog_color, reflect_color_w, fog(dist_w, FOG_AIR_DECAY));
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
                 color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
