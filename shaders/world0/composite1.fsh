@@ -4,7 +4,9 @@
 
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
-#define SHADOW_EPSILON 1e-1
+const int shadowMapResolution = 4096;   //[1024 2048 4096]
+
+#define SHADOW_EPSILON (5e2 / shadowMapResolution)
 #define SHADOW_INTENSITY 0.95    // [0.5 0.6 0.7 0.75 0.8 0.85 0.9 0.925 0.95 0.975 1.0]
 #define SHADOW_FISHEY_LENS_INTENSITY 0.85
 
@@ -34,7 +36,7 @@ uniform sampler2D gaux3;
 uniform sampler2D gaux4;
 uniform sampler2D colortex15;
 uniform sampler2D shadowtex0;
-uniform sampler2D shadowtex1;
+uniform sampler2DShadow shadowtex1;
 
 uniform float far;
 uniform vec3 shadowLightPosition;
@@ -59,8 +61,13 @@ varying vec2 texcoord;
 
 vec2 fish_len_distortion(vec2 ndc_coord_xy) {
     float dist = length(ndc_coord_xy);
-    float distort = (1.0 - SHADOW_FISHEY_LENS_INTENSITY ) + dist * SHADOW_FISHEY_LENS_INTENSITY;
+    float distort = (1.0 - SHADOW_FISHEY_LENS_INTENSITY) + dist * SHADOW_FISHEY_LENS_INTENSITY;
     return ndc_coord_xy.xy / distort;
+}
+
+float fish_len_distortion_grad(float dist) {
+    float distort = (1.0 - SHADOW_FISHEY_LENS_INTENSITY) + dist * SHADOW_FISHEY_LENS_INTENSITY;
+    return (1.0 - SHADOW_FISHEY_LENS_INTENSITY) / (distort * distort);
 }
 
 vec3 screen_coord_to_view_coord(vec3 screen_coord) {
@@ -252,18 +259,20 @@ void main() {
         /* SHADOW */
         vec3 screen_coord = vec3(texcoord, depth_s);
         vec3 view_coord = screen_coord_to_view_coord(screen_coord);
-        view_coord += SHADOW_EPSILON * normal_s;
+        vec3 light_direction = normalize(10 * shadowLightPosition - view_coord);
+        float shadow_dist = length(view_coord - dot(view_coord, light_direction) * light_direction) / 160;
+        float shadow_sin_ = dot(light_direction, normal_s);
+        float shadow_cos_ = sqrt(1 - shadow_sin_ * shadow_sin_);
+        float shadow_cot_ = shadow_cos_ / shadow_sin_;
+        float k = SHADOW_EPSILON / fish_len_distortion_grad(shadow_dist);
+        view_coord += k * mix(shadow_cos_ * normal_s, shadow_cot_ * light_direction, clamp(0.05 / (k * shadow_cot_), 0, 1));
         vec3 world_coord = view_coord_to_world_coord(view_coord);
-        vec3 light_direction = normalize(view_coord - 10 * shadowLightPosition);
         vec3 shadow_coord = world_coord_to_shadow_coord(world_coord);
-        float shadow_dist = length(world_coord);
         // float shadow_dist_weight = 1 - smoothstep(0.75, 0.9, shadow_dist / far);
         float current_depth = shadow_coord.z;
         vec2 shadow_texcoord = fish_len_distortion(shadow_coord.xy * 2 - 1) * 0.5 + 0.5;
-        float closest_depth = texture2D(shadowtex1, shadow_texcoord).x;
-        float k = dot(light_direction, normal_s);
-        float sun_light_shadow = 1 - smoothstep(-0.05, 0.0, k);
-        float in_shadow = (current_depth >= closest_depth || k > 0) ? 1 : 0;
+        float sun_light_shadow = smoothstep(0.0, 0.05, shadow_sin_);
+        float in_shadow = shadow_sin_ < 0 ? 1 : 1 - shadow2D(shadowtex1, vec3(shadow_texcoord, current_depth)).z;
         sun_light_shadow *= 1 - in_shadow;
         sun_light_shadow = 1 - sun_light_shadow;
         // sun_light_shadow *= shadow_dist_weight;
@@ -302,7 +311,7 @@ void main() {
         sunmoon_light *= (1 - sun_light_shadow) * SHADOW_INTENSITY * k;
         color_s *= block_light + sky_light + sunmoon_light + BASE_ILLUMINATION_INTENSITY;
     }
-
+    
     gl_FragData[0] = vec4(color_s, 1.0);
 
     /* LUT SKY */
