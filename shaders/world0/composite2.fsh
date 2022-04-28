@@ -8,7 +8,7 @@
 #define GI_TEMOPORAL_FILTER_K 0.1
 #define GI_RES_SCALE 0.5   //[0.25 0.5 1]
 #define SSGI_STEP_MAX_ITER 18
-#define SSGI_DIV_MAX_ITER 4
+#define SSGI_DIV_MAX_ITER 10
 
 #define SSAO_ENABLE 1 // [0 1]
 #define SSAO_DISTANCE 256
@@ -64,8 +64,18 @@ float rand(){
 }
 //----------------------------------------
 
-vec2 nearest(vec2 texcoord) {
-    return vec2((floor(texcoord.s * viewWidth) + 0.5) / viewWidth, (floor(texcoord.t * viewHeight) + 0.5) / viewHeight);
+vec2 offset(vec2 ori) {
+    return vec2(ori.x / viewWidth, ori.y / viewHeight);
+}
+
+int is_depth_border(vec2 texcoord) {
+    float depth_00 = texture2D(gaux4, texcoord + offset(vec2(-0.5, -0.5))).x;
+    float depth_01 = texture2D(gaux4, texcoord + offset(vec2(-0.5,  0.5))).x;
+    float depth_10 = texture2D(gaux4, texcoord + offset(vec2( 0.5, -0.5))).x;
+    float depth_11 = texture2D(gaux4, texcoord + offset(vec2( 0.5,  0.5))).x;
+    float min_ = min(min(depth_00, depth_01), min(depth_10, depth_11));
+    float max_ = max(max(depth_00, depth_01), max(depth_10, depth_11));
+    return (max_ - min_ > 1e-1) ? 1 : 0;
 }
 
 vec3 screen_coord_to_view_coord(vec3 screen_coord) {
@@ -242,9 +252,9 @@ void main() {
                 theta = 2 * PI * rand();
                 vec3 gi_reflect_direction = (xz * cos(theta) * bitangent + y * gi_normal_s + xz * sin(theta) * tangent);
                 vec3 gi_reflect_color = vec3(0.0);
-                float t = 0, t_oc = 0, t_step, t_in, k, l, h, dist, reflect_dist = texture2D(gaux4, gi_texcoord).x;
+                float t = 0, t_step, k, l, h, dist, reflect_dist = texture2D(gaux4, gi_texcoord).x;
+                gi_view_coord += 0.01 * gi_normal_s;
                 vec3 reflect_coord = gi_view_coord, screen_coord;
-                int visible = 1;
                 for (int i = 0; i < SSGI_STEP_MAX_ITER; i++) {
                     k = length(gi_reflect_direction - dot(gi_reflect_direction, reflect_coord) / dot(reflect_coord, reflect_coord) * reflect_coord);
                     k = k / reflect_dist;
@@ -253,16 +263,12 @@ void main() {
                     t_step = t_step > 10 ? 10 : t_step;
                     t_step *= 0.75 + 0.5 * rand();
                     reflect_coord = gi_view_coord + (t + t_step) * gi_reflect_direction;
-                    if (reflect_coord.z > 0) {
-                        t_oc = 0;
-                        visible = 1;
-                        break;
-                    }
+                    if (reflect_coord.z > 0) break;
                     reflect_dist = length(reflect_coord);
                     screen_coord = view_coord_to_screen_coord(reflect_coord);
                     if (screen_coord.s < 0 || screen_coord.s > 1 || screen_coord.t < 0 || screen_coord.t > 1) {break;}
                     dist = texture2D(gaux4, screen_coord.st).x;
-                    if (visible == 1 && reflect_dist > dist) {
+                    if (reflect_dist > dist) {
                         l = 0;
                         h = t_step;
                         for (int j = 0; j < SSGI_DIV_MAX_ITER; j++) {
@@ -274,24 +280,14 @@ void main() {
                             if (reflect_dist > dist)  h = t_step;
                             else l = t_step;
                         }
-                        if (reflect_dist > dist - 1e-2 / k && reflect_dist < dist + 1e-2 / k && abs(dist - texture2D(gaux4, nearest(screen_coord.st)).x) < 10) {
+                        if (reflect_dist > dist - 1e-2 && reflect_dist < dist + 1e-2 && is_depth_border(screen_coord.st) == 0) {
                             gi_hit = 1;
                             gi_reflect_texcoord = screen_coord.st;
-                            break;
                         }
-                        else {
-                            visible = 0;
-                            t_in = t + t_step;
-                        }
-                    }
-                    else if (visible == 0 && reflect_dist < dist) {
-                        visible = 1;
-                        t_oc += (t - t_in);
+                        break;
                     }
                     t += t_step;
                 }
-                if (visible == 0)
-                    t_oc += (t - t_in);
                 if (gi_hit == 1) {
                     gi_reflect_color = texture2D(gcolor, gi_reflect_texcoord).rgb;
                 }
