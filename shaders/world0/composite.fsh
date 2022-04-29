@@ -4,6 +4,10 @@
 
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
+#define SSAO_ENABLE 1 // [0 1]
+#define SSGI_ENABLE 1 // [0 1]
+#define GI_TEMOPORAL_FILTER_ENABLE 1 // [0 1]
+
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
 uniform sampler2D gnormal;
@@ -11,6 +15,8 @@ uniform sampler2D composite;
 uniform sampler2D depthtex1;
 uniform sampler2D gaux3;
 uniform sampler2D gaux4;
+uniform sampler2D colortex11;
+uniform sampler2D colortex12;
 uniform sampler2D colortex15;
 
 uniform mat4 gbufferModelView;
@@ -22,6 +28,11 @@ uniform mat4 shadowModelView;
 uniform mat4 shadowModelViewInverse;
 uniform mat4 shadowProjection;
 uniform mat4 shadowProjectionInverse;
+
+uniform vec3 cameraPosition;
+uniform vec3 previousCameraPosition;
+uniform mat4 gbufferPreviousModelView;
+uniform mat4 gbufferPreviousProjection;
 
 uniform float viewWidth;
 uniform float viewHeight;
@@ -35,7 +46,20 @@ vec3 screen_coord_to_view_coord(vec3 screen_coord) {
     return view_coord;
 }
 
-/* RENDERTARGETS: 0,1,3,6,7,8,15 */
+vec3 view_coord_to_previous_view_coord(vec3 view_coord) {
+    vec3 world_coord = (gbufferModelViewInverse * vec4(view_coord, 1.0)).xyz + cameraPosition;
+    vec3 previous_view_coord = (gbufferPreviousModelView * vec4(world_coord - previousCameraPosition, 1.0)).xyz;
+    return previous_view_coord;
+}
+
+vec3 previous_view_coord_to_previous_screen_coord(vec3 previous_view_coord) {
+    vec4 previous_clid_coord = gbufferPreviousProjection * vec4(previous_view_coord, 1);
+    vec3 previous_ndc_coord = previous_clid_coord.xyz / previous_clid_coord.w;
+    vec3 previous_screen_coord = previous_ndc_coord * 0.5 + 0.5;
+    return previous_screen_coord;
+}
+
+/* RENDERTARGETS: 0,1,3,6,7,8,12,15 */
 void main() {
     vec3 color_s = texture2D(gcolor, texcoord).rgb;
     vec3 data_w = texture2D(gdepth, texcoord).rgb;
@@ -57,6 +81,7 @@ void main() {
     float sky_light_g = data_g.y;
     float block_id_g = data_g.z;
 
+    vec3 view_coord;
     float dist_s = 9999;
     float dist_w = 9999;
     float dist_g = 9999;
@@ -64,9 +89,9 @@ void main() {
 
     if (block_id_s > 0.5) {
         vec3 screen_coord = vec3(texcoord, depth_s);
-        vec3 view_coord_ = screen_coord_to_view_coord(screen_coord);
-        dist_s = length(view_coord_);
-        clip_z = -view_coord_.z;
+        view_coord = screen_coord_to_view_coord(screen_coord);
+        dist_s = length(view_coord);
+        clip_z = -view_coord.z;
     }
     else depth_s = 2;
     if (block_id_w > 0.5){
@@ -92,6 +117,26 @@ void main() {
     vec2 LUT_texcoord = vec2(texcoord.x / 256 * viewWidth, texcoord.y / 256 * viewHeight);
     if (LUT_texcoord.x < 1 && LUT_texcoord.y < 1)
         LUT_data = texture2D(colortex15, LUT_texcoord);
+
+    /* MOTION */
+    vec2 texcoord_prev = vec2(0.0);
+    float has_prev = 0;
+#if (SSAO_ENABLE || SSGI_ENABLE) && GI_TEMOPORAL_FILTER_ENABLE
+    if (block_id_s > 0.5) {
+        vec4 motion_data = texture2D(colortex12, texcoord);
+        vec3 motion = motion_data.xyz;
+        float is_moving = motion_data.w;
+        vec3 previous_view_coord = (is_moving == 1 ? view_coord - motion : view_coord_to_previous_view_coord(view_coord));
+        vec3 previous_texcoord = previous_view_coord_to_previous_screen_coord(previous_view_coord).xyz;
+        if (previous_texcoord.s > 0 && previous_texcoord.s < 1 && previous_texcoord.t > 0 && previous_texcoord.t < 1) {
+            float previous_depth_s = texture2D(colortex11, previous_texcoord.st).a;
+            if (previous_texcoord.z > previous_depth_s - 1e-3 && previous_texcoord.z < previous_depth_s + 1e-3) {
+                texcoord_prev = previous_texcoord.st;
+                has_prev = 1;
+            }
+        }
+    }
+#endif
     
     gl_FragData[0] = vec4(color_s, 0.0);
     gl_FragData[1] = vec4(depth_s, depth_w, depth_g, 0.0);
@@ -99,6 +144,7 @@ void main() {
     gl_FragData[3] = vec4(block_light_s, sky_light_s, sky_light_w, sky_light_g);
     gl_FragData[4] = vec4(dist_s, dist_w, dist_g, clip_z);
     gl_FragData[5] = vec4(color_s, 0.0);
-    gl_FragData[6] = LUT_data;
+    gl_FragData[6] = vec4(texcoord_prev, 0.0, has_prev);
+    gl_FragData[7] = LUT_data;
 
 }

@@ -27,7 +27,7 @@ uniform sampler2D gcolor;
 uniform sampler2D gnormal;
 uniform sampler2D gaux4;
 uniform sampler2D colortex10;
-uniform sampler2D colortex11;
+uniform sampler2D colortex12;
 uniform sampler2D colortex15;
 uniform sampler2D depthtex1;
 
@@ -38,11 +38,6 @@ uniform mat4 gbufferModelView;
 uniform mat4 gbufferModelViewInverse;
 uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
-
-uniform vec3 cameraPosition;
-uniform vec3 previousCameraPosition;
-uniform mat4 gbufferPreviousModelView;
-uniform mat4 gbufferPreviousProjection;
 
 uniform float viewWidth;
 uniform float viewHeight;
@@ -95,15 +90,6 @@ vec3 view_coord_to_screen_coord(vec3 view_coord) {
     vec3 ndc_coord = clid_coord.xyz / clid_coord.w;
     vec3 screen_coord = ndc_coord * 0.5 + 0.5;
     return screen_coord;
-}
-
-vec3 view_coord_to_previous_screen_coord(vec3 view_coord) {
-    vec3 world_coord = (gbufferModelViewInverse * vec4(view_coord, 1.0)).xyz + cameraPosition - previousCameraPosition;
-    vec3 previous_view_coord = (gbufferPreviousModelView * vec4(world_coord, 1.0)).xyz;
-    vec4 previous_clid_coord = gbufferPreviousProjection * vec4(previous_view_coord, 1);
-    vec3 previous_ndc_coord = previous_clid_coord.xyz / previous_clid_coord.w;
-    vec3 previous_screen_coord = previous_ndc_coord * 0.5 + 0.5;
-    return previous_screen_coord;
 }
 
 vec3 LUT_sun_color(vec3 sunDir) {
@@ -187,7 +173,7 @@ void main() {
     vec3 gi = vec3(0.0);
     float ao = 0.0;
 #if SSAO_ENABLE || SSGI_ENABLE
-    int has_previous = 0;
+    float has_prev = 0;
     vec2 gi_texcoord = (texcoord - 0.5) / GI_RES_SCALE + 0.5;
     if (gi_texcoord.x > 0 && gi_texcoord.x < 1 && gi_texcoord.y > 0 && gi_texcoord.y < 1) {
         vec4 gi_normal_data_s = texture2D(gnormal, gi_texcoord);
@@ -197,15 +183,13 @@ void main() {
             vec3 gi_screen_coord = vec3(gi_texcoord, texture2D(depthtex1, gi_texcoord).x);
             vec3 gi_view_coord = screen_coord_to_view_coord(gi_screen_coord);
             #if GI_TEMOPORAL_FILTER_ENABLE
-                vec3 previous_texcoord = view_coord_to_previous_screen_coord(gi_view_coord).xyz;
-                if (previous_texcoord.s > 0 && previous_texcoord.s < 1 && previous_texcoord.t > 0 && previous_texcoord.t < 1) {
-                    float previous_depth_s = texture2D(colortex11, previous_texcoord.st).a;
-                    if (previous_texcoord.z > previous_depth_s - 1e-3 && previous_texcoord.z < previous_depth_s + 1e-3) {
-                        has_previous = 1;
-                        vec4 gi_data = texture2D(colortex10, (previous_texcoord.st - 0.5) * GI_RES_SCALE + 0.5);
-                        gi = gi_data.rgb;
-                        ao = gi_data.a;
-                    }
+                vec4 motion_data = texture2D(colortex12, gi_texcoord);
+                vec2 texcoord_prev = motion_data.st;
+                has_prev = motion_data.a;
+                if (has_prev == 1) {
+                    vec4 gi_data = texture2D(colortex10, (texcoord_prev.st - 0.5) * GI_RES_SCALE + 0.5);
+                    gi = gi_data.rgb;
+                    ao = gi_data.a;
                 }
             #endif
             vec3 tangent = normalize(cross(gi_normal_s, gi_normal_s.y < 0.707 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
@@ -235,7 +219,7 @@ void main() {
                     ao_ = 1 - SSAO_INTENSITY * oc / SSAO_SAMPLE_NUM * (1 - smoothstep(SSAO_DISTANCE - 32, SSAO_DISTANCE, ssao_dist_s));
                     ao_ = clamp(ao_, 0, 1);
                     #if GI_TEMOPORAL_FILTER_ENABLE
-                        if (has_previous == 1) ao = (1 - GI_TEMOPORAL_FILTER_K) * ao + GI_TEMOPORAL_FILTER_K * ao_;
+                        if (has_prev == 1) ao = (1 - GI_TEMOPORAL_FILTER_K) * ao + GI_TEMOPORAL_FILTER_K * ao_;
                         else ao = ao_;
                     #else
                         ao = ao_;
@@ -292,7 +276,7 @@ void main() {
                     gi_reflect_color = texture2D(gcolor, gi_reflect_texcoord).rgb;
                 }
                 #if GI_TEMOPORAL_FILTER_ENABLE
-                    if (has_previous == 1) gi = (1 - GI_TEMOPORAL_FILTER_K) * gi + GI_TEMOPORAL_FILTER_K * gi_reflect_color;
+                    if (has_prev == 1) gi = (1 - GI_TEMOPORAL_FILTER_K) * gi + GI_TEMOPORAL_FILTER_K * gi_reflect_color;
                     else gi = GI_TEMOPORAL_FILTER_K * gi_reflect_color;
                 #else
                     gi = gi_reflect_color;

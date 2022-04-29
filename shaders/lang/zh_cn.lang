@@ -1,3 +1,6 @@
+screen.ADJUST=调整
+screen.ADJUST.comment=画面亮度，色调有关的设置
+
 screen.ILLUMINATION=光照
 screen.ILLUMINATION.comment=直接光照和阴影有关的设置
 
@@ -99,6 +102,25 @@ option.SSGI_ENABLE=屏幕空间全局光照
 option.SSGI_ENABLE.comment=使用屏幕空间信息计算全局光照。剧烈性能影响。
 value.SSGI_ENABLE.1=开启
 value.SSGI_ENABLE.0=关闭
+
+option.EXPOSURE=曝光度
+option.EXPOSURE.comment=曝光度。该值越大，亮度越大。无性能影响。
+
+option.AUTO_EXPOSURE_ENABLE=自动曝光
+option.AUTO_EXPOSURE_ENABLE.comment=自动曝光。根据环境亮度，自动调整曝光度。无性能影响。
+value.AUTO_EXPOSURE_ENABLE.1=开启
+value.AUTO_EXPOSURE_ENABLE.0=关闭
+
+option.TONEMAP_ENABLE=色调映射
+option.TONEMAP_ENABLE.comment=提高图像的动态范围，避免过曝。无性能影响。
+value.TONEMAP_ENABLE.1=开启
+value.TONEMAP_ENABLE.0=关闭
+
+option.TONE_R=色调|红
+
+option.TONE_G=色调|蓝
+
+option.TONE_B=色调|绿
 
 option.OUTLINE_ENABLE=描边
 option.OUTLINE_ENABLE.comment=为场景添加卡通风格的描边效果。

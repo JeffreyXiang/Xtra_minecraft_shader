@@ -15,9 +15,20 @@
 
 #define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
 
+#define EXPOSURE 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+#define AUTO_EXPOSURE_ENABLE 1 // [0 1]
+#define TONEMAP_ENABLE 1 // [0 1]
+#define TONE_R 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+#define TONE_G 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+#define TONE_B 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+
+#define TAA_ENABLE 1 // [0 1]
+
 uniform sampler2D gcolor;
 uniform sampler2D gaux4;
 uniform sampler2D colortex8;
+uniform sampler2D colortex11;
+uniform sampler2D colortex12;
 
 uniform mat4 gbufferModelViewInverse;
 
@@ -66,15 +77,32 @@ void main() {
     float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(MOON_INTENSITY, 1, sunmoon_light_mix);
 
     /* EXPOSURE ADJUST */
+#if AUTO_EXPOSURE_ENABLE
     float eye_brightness = (isEyeInWater == 1 ? 1 : eyeBrightnessSmooth.y / 240.0);
     eye_brightness = sky_brightness * eye_brightness * eye_brightness;
     color *= clamp(5 / eye_brightness, 0.25, 10);
+#endif
 
+    color *= EXPOSURE * vec3(TONE_R, TONE_G, TONE_B);
+
+#if TONEMAP_ENABLE
     /* TONEMAP */
     color = jodieReinhardTonemap(color);
+#endif
     
     /* GAMMA */
     color = pow(color, vec3(1 / GAMMA));
+
+    /* TAA */
+#if TAA_ENABLE
+    vec4 motion_data = texture2D(colortex12, texcoord);
+    vec2 texcoord_prev = motion_data.st;
+    float has_prev = motion_data.a;
+    if (has_prev == 1) {
+        vec3 color_prev = texture2D(colortex11, texcoord_prev).rgb;
+        color = 0.2 * color + 0.8 * color_prev;
+    }
+#endif
 
 #if OUTLINE_ENABLE
     float dist = texture2D(gaux4, texcoord).x;

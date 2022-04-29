@@ -5,24 +5,18 @@ varying vec2 texcoord;
 varying vec3 normal;
 varying vec2 lightMapCoord;
 varying float block_id;
+varying vec3 motion;
 
 attribute vec4 mc_Entity;
-
-uniform int frameCounter;
-uniform float viewWidth;
-uniform float viewHeight;
-
-const float Halton2[] = float[](1./2, 1./4, 3./4, 1./8, 5./8, 3./8, 7./8, 1./16);
-const float Halton3[] = float[](1./3, 2./3, 1./9, 4./9, 7./9, 2./9, 5./9, 8./9);
+attribute vec3 at_velocity;
 
 void main() {
     gl_Position = ftransform();
-    Halton2[frameCounter % 8];
-    gl_Position.xy += vec2((Halton2[frameCounter % 8] - 0.5) / viewWidth, (Halton3[frameCounter % 8] - 0.5) / viewHeight);
     color = gl_Color.rgb;
     color *= (abs(gl_Normal.x) == 1 ? 5./3.*0.9 : 1) * (abs(gl_Normal.z) == 1 ? 5./4.*0.95 : 1);
     texcoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).st;
     normal = gl_NormalMatrix * gl_Normal.xyz;
     lightMapCoord = (gl_TextureMatrix[1] * gl_MultiTexCoord1).st;
     block_id = mc_Entity.x > 9999 ? 2 : 1;
+    motion = at_velocity;
 }

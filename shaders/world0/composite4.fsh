@@ -35,7 +35,7 @@ vec3 screen_coord_to_view_coord(vec3 screen_coord) {
     return view_coord;
 }
 
-float kernel[] = float[](0.0625, 0.25, 0.375, 0.35, 0.0625);
+const float kernel[] = float[](0.0625, 0.25, 0.375, 0.35, 0.0625);
 
 /* RENDERTARGETS: 9 */
 void main() {

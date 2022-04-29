@@ -96,21 +96,21 @@ _w: water
      |               |         |-------------------------------------------------------------
      |               |         | a |     ao_prev      |     ao_prev      |     ao_prev      |
 ---------------------------------------------------------------------------------------------
-     |               |         | r |  in_shadow_prev  |  in_shadow_prev  |  in_shadow_prev  |
-     |               |         |-------------------------------------------------------------
-     |               |         | g |                  |                  |                  |
-  11 |   colortex11  | RGBA16F |-------------------------------------------------------------
+     |               |         | r |                  |                  |                  |
+     |               |         |---|                  |                  |                  |
+     |               |         | g |    color_prev    |    color_prev    |    color_prev    |
+  11 |   colortex11  | RGBA16F |---|                  |                  |                  |
      |               |         | b |                  |                  |                  |
      |               |         |-------------------------------------------------------------
      |               |         | a |   depth_s_prev   |   depth_s_prev   |   depth_s_prev   |
 ---------------------------------------------------------------------------------------------
      |               |         | r |                  |                  |                  |
-     |               |         |-------------------------------------------------------------
-     |               |         | g |                  |                  |                  |
-  12 |   colortex12  | RGBA16F |-------------------------------------------------------------
+     |               |         |---|                  |  texcoord_prev   |  texcoord_prev   |
+     |               |         | g |      motion      |                  |                  |
+  12 |   colortex12  | RGBA32F |---|                  |--------------------------------------
      |               |         | b |                  |                  |                  |
      |               |         |-------------------------------------------------------------
-     |               |         | a |                  |                  |                  |
+     |               |         | a |    is_moving     |     has_prev     |     has_prev     |
 ---------------------------------------------------------------------------------------------
      |               |         | r |                  |                  |                  |
      |               |         |-------------------------------------------------------------
@@ -156,6 +156,7 @@ const int colortex8Format = RGBA16F;
 const int colortex9Format = RGBA16F;
 const int colortex10Format = RGBA16F;
 const int colortex11Format = RGBA16F;
+const int colortex12Format = RGBA32F;
 const int colortex15Format = RGBA32F;
 const bool colortex10Clear = false;
 const bool colortex11Clear = false;
@@ -177,6 +178,7 @@ uniform sampler2D colortex8;
 uniform sampler2D colortex9;
 uniform sampler2D colortex10;
 uniform sampler2D colortex11;
+uniform sampler2D colortex12;
 uniform sampler2D colortex15;
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
@@ -209,6 +211,8 @@ void main() {
     // vec3 depth_g = vec3(texture2D(gaux4, texcoord).a);
     // vec3 sky_light_g = vec3(texture2D(gaux4, texcoord).y);
     // vec3 block_id_g = vec3(texture2D(gaux4, texcoord).z);
+   //  vec3 motion = vec3(texture2D(colortex12, texcoord).rgb * 10 + 0.5);
+   //  vec3 is_moving = vec3(texture2D(colortex12, texcoord).a);
 
     /* composite0-3 */
     vec3 color_s = vec3(texture2D(gcolor, texcoord).rgb);
@@ -232,6 +236,8 @@ void main() {
     vec3 dist_s = vec3(texture2D(gaux4, texcoord).x / far);
     vec3 dist_w = vec3(texture2D(gaux4, texcoord).y / far);
     vec3 dist_g = vec3(texture2D(gaux4, texcoord).z / far);
+    vec3 texcoord_prev = vec3(texture2D(colortex12, texcoord).rgb);
+    vec3 has_prev = vec3(texture2D(colortex12, texcoord).a);
     vec3 lut_data = vec3(texture2D(colortex15, texcoord).rgb);
 
 
