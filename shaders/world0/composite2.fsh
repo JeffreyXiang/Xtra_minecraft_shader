@@ -4,8 +4,8 @@
 
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
-#define GI_TEMOPORAL_FILTER_ENABLE 1 // [0 1]
-#define GI_TEMOPORAL_FILTER_K 0.1 // [0.2 0.1 0.05 0.02 0.01]
+#define GI_TEMPORAL_FILTER_ENABLE 1 // [0 1]
+#define GI_TEMPORAL_FILTER_K 0.1 // [0.2 0.1 0.05 0.02 0.01]
 #define GI_RES_SCALE 0.5   // [0.25 0.5 1]
 
 #define SSAO_ENABLE 1 // [0 1]
@@ -63,20 +63,20 @@ vec2 offset(vec2 ori) {
     return vec2(ori.x / viewWidth, ori.y / viewHeight);
 }
 
-int is_depth_border(vec2 texcoord) {
-    float depth_00 = texture2D(gaux4, texcoord + offset(vec2(-0.5, -0.5))).x;
-    float depth_01 = texture2D(gaux4, texcoord + offset(vec2(-0.5,  0.5))).x;
-    float depth_10 = texture2D(gaux4, texcoord + offset(vec2( 0.5, -0.5))).x;
-    float depth_11 = texture2D(gaux4, texcoord + offset(vec2( 0.5,  0.5))).x;
-    float min_ = min(min(depth_00, depth_01), min(depth_10, depth_11));
-    float max_ = max(max(depth_00, depth_01), max(depth_10, depth_11));
+int is_dist_border(vec2 texcoord) {
+    float dist_00 = texture2D(gaux4, texcoord + offset(vec2(-0.5, -0.5))).x;
+    float dist_01 = texture2D(gaux4, texcoord + offset(vec2(-0.5,  0.5))).x;
+    float dist_10 = texture2D(gaux4, texcoord + offset(vec2( 0.5, -0.5))).x;
+    float dist_11 = texture2D(gaux4, texcoord + offset(vec2( 0.5,  0.5))).x;
+    float min_ = min(min(dist_00, dist_01), min(dist_10, dist_11));
+    float max_ = max(max(dist_00, dist_01), max(dist_10, dist_11));
     return (max_ - min_ > 1e-1) ? 1 : 0;
 }
 
 vec3 screen_coord_to_view_coord(vec3 screen_coord) {
     vec4 ndc_coord = vec4(screen_coord * 2 - 1, 1);
-    vec4 clid_coord = gbufferProjectionInverse * ndc_coord;
-    vec3 view_coord = clid_coord.xyz / clid_coord.w;
+    vec4 clip_coord = gbufferProjectionInverse * ndc_coord;
+    vec3 view_coord = clip_coord.xyz / clip_coord.w;
     return view_coord;
 }
 
@@ -86,8 +86,8 @@ vec3 view_coord_to_world_coord(vec3 view_coord) {
 }
 
 vec3 view_coord_to_screen_coord(vec3 view_coord) {
-    vec4 clid_coord = gbufferProjection * vec4(view_coord, 1);
-    vec3 ndc_coord = clid_coord.xyz / clid_coord.w;
+    vec4 clip_coord = gbufferProjection * vec4(view_coord, 1);
+    vec3 ndc_coord = clip_coord.xyz / clip_coord.w;
     vec3 screen_coord = ndc_coord * 0.5 + 0.5;
     return screen_coord;
 }
@@ -182,7 +182,7 @@ void main() {
         if (gi_block_id_s > 0.5) {
             vec3 gi_screen_coord = vec3(gi_texcoord, texture2D(depthtex1, gi_texcoord).x);
             vec3 gi_view_coord = screen_coord_to_view_coord(gi_screen_coord);
-            #if GI_TEMOPORAL_FILTER_ENABLE
+            #if GI_TEMPORAL_FILTER_ENABLE
                 vec4 motion_data = texture2D(colortex12, gi_texcoord);
                 vec2 texcoord_prev = motion_data.st;
                 has_prev = motion_data.a;
@@ -218,8 +218,8 @@ void main() {
                     }
                     ao_ = 1 - SSAO_INTENSITY * oc / SSAO_SAMPLE_NUM * (1 - smoothstep(SSAO_DISTANCE - 32, SSAO_DISTANCE, ssao_dist_s));
                     ao_ = clamp(ao_, 0, 1);
-                    #if GI_TEMOPORAL_FILTER_ENABLE
-                        if (has_prev == 1) ao = (1 - GI_TEMOPORAL_FILTER_K) * ao + GI_TEMOPORAL_FILTER_K * ao_;
+                    #if GI_TEMPORAL_FILTER_ENABLE
+                        if (has_prev == 1) ao = (1 - GI_TEMPORAL_FILTER_K) * ao + GI_TEMPORAL_FILTER_K * ao_;
                         else ao = ao_;
                     #else
                         ao = ao_;
@@ -264,7 +264,7 @@ void main() {
                             if (reflect_dist > dist)  h = t_step;
                             else l = t_step;
                         }
-                        if (reflect_dist > dist - 1e-2 && reflect_dist < dist + 1e-2 && is_depth_border(screen_coord.st) == 0) {
+                        if (reflect_dist > dist - 1e-2 && reflect_dist < dist + 1e-2 && is_dist_border(screen_coord.st) == 0) {
                             gi_hit = 1;
                             gi_reflect_texcoord = screen_coord.st;
                         }
@@ -275,9 +275,9 @@ void main() {
                 if (gi_hit == 1) {
                     gi_reflect_color = texture2D(gcolor, gi_reflect_texcoord).rgb;
                 }
-                #if GI_TEMOPORAL_FILTER_ENABLE
-                    if (has_prev == 1) gi = (1 - GI_TEMOPORAL_FILTER_K) * gi + GI_TEMOPORAL_FILTER_K * gi_reflect_color;
-                    else gi = GI_TEMOPORAL_FILTER_K * gi_reflect_color;
+                #if GI_TEMPORAL_FILTER_ENABLE
+                    if (has_prev == 1) gi = (1 - GI_TEMPORAL_FILTER_K) * gi + GI_TEMPORAL_FILTER_K * gi_reflect_color;
+                    else gi = GI_TEMPORAL_FILTER_K * gi_reflect_color;
                 #else
                     gi = gi_reflect_color;
                 #endif

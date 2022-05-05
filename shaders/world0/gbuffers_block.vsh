@@ -1,5 +1,7 @@
 #version 120
 
+#define TAA_ENABLE 1 // [0 1]
+
 varying vec3 color;
 varying vec2 texcoord;
 varying vec3 normal;
@@ -10,8 +12,19 @@ varying vec3 motion;
 attribute vec4 mc_Entity;
 attribute vec3 at_velocity;
 
+uniform int frameCounter;
+uniform float viewWidth;
+uniform float viewHeight;
+
+const float Halton2[] = float[](1./2, 1./4, 3./4, 1./8, 5./8, 3./8, 7./8, 1./16);
+const float Halton3[] = float[](1./3, 2./3, 1./9, 4./9, 7./9, 2./9, 5./9, 8./9);
+
 void main() {
     gl_Position = ftransform();
+#if TAA_ENABLE
+    int idx = int(mod(frameCounter, 8));
+    gl_Position.xy += vec2((Halton2[idx] * 2 - 1) * gl_Position.w / viewWidth, (Halton3[idx] * 2 - 1) * gl_Position.w / viewHeight);
+#endif
     color = gl_Color.rgb;
     color *= (abs(gl_Normal.x) == 1 ? 5./3.*0.9 : 1) * (abs(gl_Normal.z) == 1 ? 5./4.*0.95 : 1);
     texcoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).st;

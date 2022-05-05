@@ -30,8 +30,8 @@ vec2 offset(vec2 ori) {
 
 vec3 screen_coord_to_view_coord(vec3 screen_coord) {
     vec4 ndc_coord = vec4(screen_coord * 2 - 1, 1);
-    vec4 clid_coord = gbufferProjectionInverse * ndc_coord;
-    vec3 view_coord = clid_coord.xyz / clid_coord.w;
+    vec4 clip_coord = gbufferProjectionInverse * ndc_coord;
+    vec3 view_coord = clip_coord.xyz / clip_coord.w;
     return view_coord;
 }
 

@@ -76,8 +76,8 @@ float rand(){
 
 vec3 screen_coord_to_view_coord(vec3 screen_coord) {
     vec4 ndc_coord = vec4(screen_coord * 2 - 1, 1);
-    vec4 clid_coord = gbufferProjectionInverse * ndc_coord;
-    vec3 view_coord = clid_coord.xyz / clid_coord.w;
+    vec4 clip_coord = gbufferProjectionInverse * ndc_coord;
+    vec3 view_coord = clip_coord.xyz / clip_coord.w;
     return view_coord;
 }
 
@@ -87,8 +87,8 @@ vec3 view_coord_to_world_coord(vec3 view_coord) {
 }
 
 vec3 view_coord_to_screen_coord(vec3 view_coord) {
-    vec4 clid_coord = gbufferProjection * vec4(view_coord, 1);
-    vec3 ndc_coord = clid_coord.xyz / clid_coord.w;
+    vec4 clip_coord = gbufferProjection * vec4(view_coord, 1);
+    vec3 ndc_coord = clip_coord.xyz / clip_coord.w;
     vec3 screen_coord = ndc_coord * 0.5 + 0.5;
     return screen_coord;
 }

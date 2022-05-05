@@ -6,7 +6,8 @@
 
 #define SSAO_ENABLE 1 // [0 1]
 #define SSGI_ENABLE 1 // [0 1]
-#define GI_TEMOPORAL_FILTER_ENABLE 1 // [0 1]
+#define GI_TEMPORAL_FILTER_ENABLE 1 // [0 1]
+#define TAA_ENABLE 1 // [0 1]
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
@@ -34,15 +35,19 @@ uniform vec3 previousCameraPosition;
 uniform mat4 gbufferPreviousModelView;
 uniform mat4 gbufferPreviousProjection;
 
+uniform int frameCounter;
 uniform float viewWidth;
 uniform float viewHeight;
+
+const float Halton2[] = float[](1./2, 1./4, 3./4, 1./8, 5./8, 3./8, 7./8, 1./16);
+const float Halton3[] = float[](1./3, 2./3, 1./9, 4./9, 7./9, 2./9, 5./9, 8./9);
 
 varying vec2 texcoord;
 
 vec3 screen_coord_to_view_coord(vec3 screen_coord) {
     vec4 ndc_coord = vec4(screen_coord * 2 - 1, 1);
-    vec4 clid_coord = gbufferProjectionInverse * ndc_coord;
-    vec3 view_coord = clid_coord.xyz / clid_coord.w;
+    vec4 clip_coord = gbufferProjectionInverse * ndc_coord;
+    vec3 view_coord = clip_coord.xyz / clip_coord.w;
     return view_coord;
 }
 
@@ -53,10 +58,30 @@ vec3 view_coord_to_previous_view_coord(vec3 view_coord) {
 }
 
 vec3 previous_view_coord_to_previous_screen_coord(vec3 previous_view_coord) {
-    vec4 previous_clid_coord = gbufferPreviousProjection * vec4(previous_view_coord, 1);
-    vec3 previous_ndc_coord = previous_clid_coord.xyz / previous_clid_coord.w;
+    vec4 previous_clip_coord = gbufferPreviousProjection * vec4(previous_view_coord, 1);
+    vec3 previous_ndc_coord = previous_clip_coord.xyz / previous_clip_coord.w;
     vec3 previous_screen_coord = previous_ndc_coord * 0.5 + 0.5;
     return previous_screen_coord;
+}
+
+vec2 nearest(vec2 texcoord) {
+    return vec2((floor(texcoord.s * viewWidth) + 0.5) / viewWidth, (floor(texcoord.t * viewHeight) + 0.5) / viewHeight);
+}
+
+vec2 offset(vec2 ori) {
+    return vec2(ori.x / viewWidth, ori.y / viewHeight);
+}
+
+int is_dist_match(float dist, vec3 view_dir, vec3 normal_s, vec2 texcoord) {
+    // int idx = int(mod(frameCounter, 8));
+    // int idx_prev = int(mod(frameCounter-1, 8));
+    // texcoord -= vec2((Halton2[idx] - 0.5) / viewWidth, (Halton3[idx] - 0.5) / viewHeight);
+    // texcoord += vec2((Halton2[idx_prev] - 0.5) / viewWidth, (Halton3[idx_prev] - 0.5) / viewHeight);
+    // texcoord = nearest(texcoord);
+    float dist_prev = texture2D(colortex11, texcoord).a;
+    float k = dot(view_dir, normal_s);
+    k = 1 - sqrt(1 - k * k) / k;
+    return (dist > dist_prev - 2e-3 * k * dist_prev && dist < dist_prev + 2e-3 * k * dist_prev) ? 1 : 0;
 }
 
 /* RENDERTARGETS: 0,1,3,6,7,8,12,15 */
@@ -81,15 +106,14 @@ void main() {
     float sky_light_g = data_g.y;
     float block_id_g = data_g.z;
 
-    vec3 view_coord;
     float dist_s = 9999;
     float dist_w = 9999;
     float dist_g = 9999;
     float clip_z = 9999;
 
+    vec3 screen_coord = vec3(texcoord, depth_s);
+    vec3 view_coord = screen_coord_to_view_coord(screen_coord);
     if (block_id_s > 0.5) {
-        vec3 screen_coord = vec3(texcoord, depth_s);
-        view_coord = screen_coord_to_view_coord(screen_coord);
         dist_s = length(view_coord);
         clip_z = -view_coord.z;
     }
@@ -121,20 +145,15 @@ void main() {
     /* MOTION */
     vec2 texcoord_prev = vec2(0.0);
     float has_prev = 0;
-#if (SSAO_ENABLE || SSGI_ENABLE) && GI_TEMOPORAL_FILTER_ENABLE
-    if (block_id_s > 0.5) {
-        vec4 motion_data = texture2D(colortex12, texcoord);
-        vec3 motion = motion_data.xyz;
-        float is_moving = motion_data.w;
-        vec3 previous_view_coord = (is_moving == 1 ? view_coord - motion : view_coord_to_previous_view_coord(view_coord));
-        vec3 previous_texcoord = previous_view_coord_to_previous_screen_coord(previous_view_coord).xyz;
-        if (previous_texcoord.s > 0 && previous_texcoord.s < 1 && previous_texcoord.t > 0 && previous_texcoord.t < 1) {
-            float previous_depth_s = texture2D(colortex11, previous_texcoord.st).a;
-            if (previous_texcoord.z > previous_depth_s - 1e-3 && previous_texcoord.z < previous_depth_s + 1e-3) {
-                texcoord_prev = previous_texcoord.st;
-                has_prev = 1;
-            }
-        }
+#if (SSAO_ENABLE || SSGI_ENABLE) && GI_TEMPORAL_FILTER_ENABLE || TAA_ENABLE
+    vec4 motion_data = texture2D(colortex12, texcoord);
+    vec3 motion = motion_data.xyz;
+    float is_moving = motion_data.w;
+    vec3 previous_view_coord = (is_moving == 1 ? view_coord - motion : view_coord_to_previous_view_coord(view_coord));
+    float previous_dist_s = length(previous_view_coord);
+    texcoord_prev = previous_view_coord_to_previous_screen_coord(previous_view_coord).st;
+    if (texcoord_prev.s > 0 && texcoord_prev.s < 1 && texcoord_prev.t > 0 && texcoord_prev.t < 1 && is_dist_match(previous_dist_s, normalize(view_coord), normal_s, texcoord_prev) == 1) {
+        has_prev = 1;
     }
 #endif
     

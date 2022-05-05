@@ -28,6 +28,12 @@ option.SHADOW_INTENSITY.comment=阴影强度。值越大，阴影越暗。无性
 option.shadowMapResolution=阴影贴图分辨率
 option.shadowMapResolution.comment=阴影贴图的分辨率。更大的分辨率带来更精细的阴影。较小性能影响。
 
+option.SHADOW_AA_ENABLE=阴影抗锯齿
+option.SHADOW_AA_ENABLE.comment=使阴影边缘更加平滑。轻微性能影响。
+
+option.SHADOW_AA_SAMPLE=阴影抗锯齿采样数
+option.SHADOW_AA_SAMPLE.comment=采样数越多，阴影边缘越加平滑。轻微性能影响。
+
 option.ILLUMINATION_MODE=光源光照模式
 option.ILLUMINATION_MODE.comment=方块光源的光照模式。<物理>使用更真实的平方反比亮度；<经典>使用原版的线性亮度。无性能影响。
 value.ILLUMINATION_MODE.0=物理
@@ -61,13 +67,13 @@ option.FOG_THICKNESS.comment=雾厚度。值越大，空气中的雾越厚。无
 option.GI_RES_SCALE=全局光照分辨率
 option.GI_RES_SCALE.comment=计算全局光照时使用的分辨率。使用缩减的分辨率以提高性能，但会降低质量。剧烈性能影响。
 
-option.GI_TEMOPORAL_FILTER_ENABLE=全局光照时间过滤
-option.GI_TEMOPORAL_FILTER_ENABLE.comment=使用帧间历史信息提高全局光照采样数，使全局光照更加平滑。会造成拖影。轻微性能影响。
-value.GI_TEMOPORAL_FILTER_ENABLE.1=开启
-value.GI_TEMOPORAL_FILTER_ENABLE.0=关闭
+option.GI_TEMPORAL_FILTER_ENABLE=全局光照时间过滤
+option.GI_TEMPORAL_FILTER_ENABLE.comment=使用帧间历史信息提高全局光照采样数，使全局光照更加平滑。会造成拖影。轻微性能影响。
+value.GI_TEMPORAL_FILTER_ENABLE.1=开启
+value.GI_TEMPORAL_FILTER_ENABLE.0=关闭
 
-option.GI_TEMOPORAL_FILTER_K=全局光照时间过滤系数
-option.GI_TEMOPORAL_FILTER_K.comment=全局光照时间过滤中当前帧信息的比例。该值越大，全局光照越平滑，但拖影更重。无性能影响。
+option.GI_TEMPORAL_FILTER_K=全局光照时间过滤系数
+option.GI_TEMPORAL_FILTER_K.comment=全局光照时间过滤中当前帧信息的比例。该值越大，全局光照越平滑，但拖影更重。无性能影响。
 
 option.GI_SPATIAL_FILTER_ENABLE=全局光照空间过滤
 option.GI_SPATIAL_FILTER_ENABLE.comment=使用图像滤波降低全局光照的噪声，使全局光照更加平滑。较大性能影响。

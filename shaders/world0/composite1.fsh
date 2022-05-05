@@ -1,14 +1,19 @@
 #version 120
 
 #define PI 3.1415926535898
+#define PHI 0.6180339887498949
 
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
+#define TAA_ENABLE 1 // [0 1]
+
 const int shadowMapResolution = 4096;   //[1024 2048 4096]
 
-#define SHADOW_EPSILON (5e2 / shadowMapResolution)
 #define SHADOW_INTENSITY 0.95    // [0.5 0.6 0.7 0.75 0.8 0.85 0.9 0.925 0.95 0.975 1.0]
+#define SHADOW_AA_ENABLE 1 //[0 1]
+#define SHADOW_AA_SAMPLE 64 //[4 8 16 32 64 128 256]
 #define SHADOW_FISHEY_LENS_INTENSITY 0.85
+#define SHADOW_EPSILON (5e2 / shadowMapResolution * (SHADOW_AA_ENABLE == 1 ? 3 : 1))
 
 #define ILLUMINATION_EPSILON 0.5
 #define ILLUMINATION_MODE 0     // [0 1]
@@ -53,10 +58,22 @@ uniform mat4 shadowModelViewInverse;
 uniform mat4 shadowProjection;
 uniform mat4 shadowProjectionInverse;
 
+uniform int frameCounter;
 uniform float viewWidth;
 uniform float viewHeight;
 
+const float Halton2[] = float[](1./2, 1./4, 3./4, 1./8, 5./8, 3./8, 7./8, 1./16);
+const float Halton3[] = float[](1./3, 2./3, 1./9, 4./9, 7./9, 2./9, 5./9, 8./9);
+
 varying vec2 texcoord;
+
+vec2 shadowmap_offset(vec2 ori) {
+    return vec2(ori.x / shadowMapResolution, ori.y / shadowMapResolution);
+}
+
+vec2 shadowmap_nearest(vec2 texcoord) {
+    return vec2((floor(texcoord.s * shadowMapResolution) + 0.5) / shadowMapResolution, (floor(texcoord.t * shadowMapResolution) + 0.5) / shadowMapResolution);
+}
 
 vec2 fish_len_distortion(vec2 ndc_coord_xy) {
     float dist = length(ndc_coord_xy);
@@ -71,8 +88,8 @@ float fish_len_distortion_grad(float dist) {
 
 vec3 screen_coord_to_view_coord(vec3 screen_coord) {
     vec4 ndc_coord = vec4(screen_coord * 2 - 1, 1);
-    vec4 clid_coord = gbufferProjectionInverse * ndc_coord;
-    vec3 view_coord = clid_coord.xyz / clid_coord.w;
+    vec4 clip_coord = gbufferProjectionInverse * ndc_coord;
+    vec3 view_coord = clip_coord.xyz / clip_coord.w;
     return view_coord;
 }
 
@@ -97,6 +114,30 @@ float fog(float dist, float decay) {
     dist = dist * dist;
     dist = dist * dist;
     return 1 / dist;
+}
+
+vec2 Fibonacci_disk_sample(int n, int total) {
+    float theta = 2 * PI * fract(PHI * n);
+    float r = sqrt(float(n) / total);
+    return vec2(r * cos(theta), r * sin(theta));
+}
+
+int is_shadow_border(vec2 shadow_texcoord, float shadow_depth) {
+    // shadow_texcoord = shadowmap_nearest(shadow_texcoord);
+    float shadow_00 = shadow2D(shadowtex1, vec3(shadow_texcoord + shadowmap_offset(vec2(-2, -2)), shadow_depth)).z;
+    float shadow_01 = shadow2D(shadowtex1, vec3(shadow_texcoord + shadowmap_offset(vec2(-2,  2)), shadow_depth)).z;
+    float shadow_10 = shadow2D(shadowtex1, vec3(shadow_texcoord + shadowmap_offset(vec2( 2, -2)), shadow_depth)).z;
+    float shadow_11 = shadow2D(shadowtex1, vec3(shadow_texcoord + shadowmap_offset(vec2( 2,  2)), shadow_depth)).z;
+    float min_ = min(min(shadow_00, shadow_01), min(shadow_10, shadow_11));
+    float max_ = max(max(shadow_00, shadow_01), max(shadow_10, shadow_11));
+    if (min_ < 1 && max_ > 0) return 1;
+    shadow_00 = shadow2D(shadowtex1, vec3(shadow_texcoord + shadowmap_offset(vec2(-1, -1)), shadow_depth)).z;
+    shadow_01 = shadow2D(shadowtex1, vec3(shadow_texcoord + shadowmap_offset(vec2(-1,  1)), shadow_depth)).z;
+    shadow_10 = shadow2D(shadowtex1, vec3(shadow_texcoord + shadowmap_offset(vec2( 1, -1)), shadow_depth)).z;
+    shadow_11 = shadow2D(shadowtex1, vec3(shadow_texcoord + shadowmap_offset(vec2( 1,  1)), shadow_depth)).z;
+    min_ = min(min(shadow_00, shadow_01), min(shadow_10, shadow_11));
+    max_ = max(max(shadow_00, shadow_01), max(shadow_10, shadow_11));
+    return (min_ < 1 && max_ > 0) ? 1 : 0;
 }
 
 vec3 LUT_color_temperature(float temp) {
@@ -257,6 +298,10 @@ void main() {
 
         /* SHADOW */
         vec3 screen_coord = vec3(texcoord, depth_s);
+        #if TAA_ENABLE
+            int idx = int(mod(frameCounter, 8));
+            screen_coord.st -= vec2((Halton2[idx] - 0.5) / viewWidth, (Halton3[idx] - 0.5) / viewHeight);
+        #endif
         vec3 view_coord = screen_coord_to_view_coord(screen_coord);
         vec3 light_direction = normalize(10 * shadowLightPosition - view_coord);
         float shadow_dist = length(view_coord - dot(view_coord, light_direction) * light_direction) / 160;
@@ -270,8 +315,21 @@ void main() {
         // float shadow_dist_weight = 1 - smoothstep(0.75, 0.9, shadow_dist / far);
         float current_depth = shadow_coord.z;
         vec2 shadow_texcoord = fish_len_distortion(shadow_coord.xy * 2 - 1) * 0.5 + 0.5;
+        float in_shadow = 1 - shadow2D(shadowtex1, vec3(shadow_texcoord, current_depth)).z;
+        #if SHADOW_AA_ENABLE
+        if (is_shadow_border(shadow_texcoord, current_depth) == 1) {
+            in_shadow = 0;
+            for (int i = 0; i < SHADOW_AA_SAMPLE; i++) {
+                in_shadow += 1 - shadow2D(shadowtex1, vec3(
+                    shadow_texcoord + 2 * shadowmap_offset(Fibonacci_disk_sample(i, SHADOW_AA_SAMPLE)),
+                    current_depth
+                )).z;
+            }
+            in_shadow /= SHADOW_AA_SAMPLE;
+        }
+        #endif
+        in_shadow = shadow_sin_ < 0 ? 1 : in_shadow;
         float sun_light_shadow = smoothstep(0.0, 0.05, shadow_sin_);
-        float in_shadow = shadow_sin_ < 0 ? 1 : 1 - shadow2D(shadowtex1, vec3(shadow_texcoord, current_depth)).z;
         sun_light_shadow *= 1 - in_shadow;
         sun_light_shadow = 1 - sun_light_shadow;
         // sun_light_shadow *= shadow_dist_weight;

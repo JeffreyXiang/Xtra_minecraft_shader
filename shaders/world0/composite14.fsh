@@ -2,25 +2,11 @@
 
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
-#define MOON_INTENSITY 2.533e-6
-#define SUN_SRAD 2.101e4
-#define MOON_SRAD 2.101e4
-
-#define SKY_ILLUMINATION_INTENSITY 20.0  //[5.0 10.0 15.0 20.0 25.0 30.0 35.0 40.0 45.0 50.0]
-
 #define OUTLINE_ENABLE 1 // [0 1]
 #define OUTLINE_WIDTH 1
 
 #define FOG_AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01]
-
 #define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
-
-#define EXPOSURE 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
-#define AUTO_EXPOSURE_ENABLE 1 // [0 1]
-#define TONEMAP_ENABLE 1 // [0 1]
-#define TONE_R 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
-#define TONE_G 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
-#define TONE_B 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
 
 #define TAA_ENABLE 1 // [0 1]
 
@@ -30,25 +16,15 @@ uniform sampler2D colortex8;
 uniform sampler2D colortex11;
 uniform sampler2D colortex12;
 
-uniform mat4 gbufferModelViewInverse;
-
-uniform ivec2 eyeBrightnessSmooth;
-uniform vec3 sunPosition;
 uniform float viewWidth;
 uniform float viewHeight;
 uniform float far;
 uniform int isEyeInWater;
 
-
 varying vec2 texcoord;
 
 vec2 offset(vec2 ori) {
     return vec2(ori.x / viewWidth, ori.y / viewHeight);
-}
-
-vec3 view_coord_to_world_coord(vec3 view_coord) {
-    vec3 world_coord = (gbufferModelViewInverse * vec4(view_coord, 1.0)).xyz;
-    return world_coord;
 }
 
 float fog(float dist, float decay) {
@@ -61,47 +37,61 @@ float fog(float dist, float decay) {
     return 1 / dist;
 }
 
-vec3 jodieReinhardTonemap(vec3 c){
-    // From: https://www.shadertoy.com/view/tdSXzD
-    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    vec3 tc = c / (c + 1.0);
-    return mix(c / (l + 1.0), tc, tc);
+vec3 RGB_to_YCgCo(vec3 rgb) {
+    float temp = 0.25 * (rgb.r + rgb.b);
+    return vec3(temp + 0.5 * rgb.g, -temp + 0.5 * rgb.g, 0.5 * (rgb.r - rgb.b));
+}
+
+vec3 YCgCo_to_RGB(vec3 YCgCo) {
+    float temp = YCgCo.r - YCgCo.g;
+    return vec3(temp + YCgCo.b, YCgCo.r + YCgCo.g, temp - YCgCo.b);
+}
+
+vec3 color_clip_to_buffer(sampler2D buffer, vec2 texcoord, vec3 color) {
+    color = RGB_to_YCgCo(color);
+
+    vec3 YCoCg_00 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2(-1, -1))).rgb);
+    vec3 YCoCg_01 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2(-1,  0))).rgb);
+    vec3 YCoCg_02 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2(-1,  1))).rgb);
+    vec3 YCoCg_10 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2( 0, -1))).rgb);
+    vec3 YCoCg_11 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2( 0,  0))).rgb);
+    vec3 YCoCg_12 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2( 0,  1))).rgb);
+    vec3 YCoCg_20 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2( 1, -1))).rgb);
+    vec3 YCoCg_21 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2( 1,  0))).rgb);
+    vec3 YCoCg_22 = RGB_to_YCgCo(texture2D(gcolor, texcoord + offset(vec2( 1,  1))).rgb);
+    vec3 YCoCg_min = min(YCoCg_00, min(YCoCg_01, min(YCoCg_02, min(YCoCg_10, min(YCoCg_11, min(YCoCg_12, min(YCoCg_20, min(YCoCg_21, YCoCg_22))))))));
+    vec3 YCoCg_max = max(YCoCg_00, max(YCoCg_01, max(YCoCg_02, max(YCoCg_10, max(YCoCg_11, max(YCoCg_12, max(YCoCg_20, max(YCoCg_21, YCoCg_22))))))));
+
+    vec3 p_clip = 0.5 * (YCoCg_max + YCoCg_min);
+    vec3 e_clip = 0.5 * (YCoCg_max - YCoCg_min);
+
+    vec3 v_clip = color - p_clip;
+    vec3 v_unit = abs(v_clip / e_clip);
+    float k = max(v_unit.x, max(v_unit.y, v_unit.z));
+
+    color = p_clip + v_clip / max(k, 1);
+    color = YCgCo_to_RGB(color);
+
+    return color;
 }
 
 /* DRAWBUFFERS: 0 */
 void main() {
     vec3 color = texture2D(gcolor, texcoord).rgb;
 
-    vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
-    float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_dir.y);
-    float sky_brightness = SKY_ILLUMINATION_INTENSITY * mix(MOON_INTENSITY, 1, sunmoon_light_mix);
-
-    /* EXPOSURE ADJUST */
-#if AUTO_EXPOSURE_ENABLE
-    float eye_brightness = (isEyeInWater == 1 ? 1 : eyeBrightnessSmooth.y / 240.0);
-    eye_brightness = sky_brightness * eye_brightness * eye_brightness;
-    color *= clamp(5 / eye_brightness, 0.25, 10);
-#endif
-
-    color *= EXPOSURE * vec3(TONE_R, TONE_G, TONE_B);
-
-#if TONEMAP_ENABLE
-    /* TONEMAP */
-    color = jodieReinhardTonemap(color);
-#endif
-    
-    /* GAMMA */
-    color = pow(color, vec3(1 / GAMMA));
-
     /* TAA */
 #if TAA_ENABLE
     vec4 motion_data = texture2D(colortex12, texcoord);
     vec2 texcoord_prev = motion_data.st;
     float has_prev = motion_data.a;
-    if (has_prev == 1) {
-        vec3 color_prev = texture2D(colortex11, texcoord_prev).rgb;
-        color = 0.2 * color + 0.8 * color_prev;
-    }
+    vec3 color_prev = texture2D(colortex11, texcoord_prev).rgb;
+    texcoord_prev.s *= viewWidth;
+    texcoord_prev.t *= viewHeight;
+    float taa_k = min(1, 0.05 + 0.95 * (
+        abs(floor(texcoord_prev.s) - texcoord_prev.s + 0.5) + 
+        abs(floor(texcoord_prev.t) - texcoord_prev.t + 0.5)
+    ));
+    color = vec3(taa_k * color + (1 - taa_k) * color_clip_to_buffer(gcolor, texcoord, color_prev));
 #endif
 
 #if OUTLINE_ENABLE
