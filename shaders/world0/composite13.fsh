@@ -32,6 +32,8 @@
 #define BLOOM_ENABLE 1 // [0 1]
 #define BLOOM_INTENSITY 1 // [0.2 0.5 1 1.2 1.5 2 5]
 
+#define LUT_WIDTH 512
+#define LUT_HEIGHT 512
 
 uniform sampler2D gcolor;
 uniform sampler2D gnormal;
@@ -91,10 +93,9 @@ vec3 view_coord_to_world_coord(vec3 view_coord) {
     return world_coord;
 }
 
-vec3 LUT_sky_light(vec3 sunDir) {
-	float sunCosZenithAngle = sunDir.y;
-    vec2 uv = vec2((32.5 + 223 * (sunCosZenithAngle * 0.5 + 0.5)) / viewWidth,
-                   67.5 / viewHeight);
+vec3 LUT_sky_light() {
+    vec2 uv = vec2(32.5 / LUT_WIDTH,
+                   67.5 / LUT_HEIGHT);
     return texture2D(colortex15, uv).rgb;
 }
 
@@ -168,7 +169,7 @@ void main() {
     color = (1 - min(1, color_g.a)) * color + color_g.rgb;
 
     vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
-    float sky_brightness = SKY_ILLUMINATION_INTENSITY * grayscale(LUT_sky_light(sun_dir));
+    float sky_brightness = SKY_ILLUMINATION_INTENSITY * grayscale(LUT_sky_light());
 
     /* EXPOSURE ADJUST */
     #if AUTO_EXPOSURE_ENABLE

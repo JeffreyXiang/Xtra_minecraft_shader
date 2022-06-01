@@ -29,6 +29,9 @@
 #define TONE_G 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
 #define TONE_B 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
 
+#define LUT_WIDTH 512
+#define LUT_HEIGHT 512
+
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
 uniform sampler2D gnormal;
@@ -133,13 +136,13 @@ vec3 jodieReinhardTonemap(vec3 c){
 }
 
 vec3 LUT_water_scattering(float decay) {
-    return texture2D(colortex15, vec2((0.5 + (1 - decay) * 255) / viewWidth, 2.5 / viewHeight)).rgb * 0.5;
+    return texture2D(colortex15, vec2((0.5 + (1 - decay) * 255) / LUT_WIDTH, 2.5 / LUT_HEIGHT)).rgb * 0.5;
 }
 
 vec3 LUT_sun_color(vec3 sunDir) {
 	float sunCosZenithAngle = sunDir.y;
-    vec2 uv = vec2((0.5 + 255 * clamp(0.5 + 0.5 * sunCosZenithAngle, 0.0, 1.0)) / viewWidth,
-                   3.5 / viewHeight);
+    vec2 uv = vec2((0.5 + 255 * clamp(0.5 + 0.5 * sunCosZenithAngle, 0.0, 1.0)) / LUT_WIDTH,
+                   3.5 / LUT_HEIGHT);
     return texture2D(colortex15, uv).rgb;
 }
 
@@ -166,15 +169,14 @@ vec3 LUT_sky(vec3 rayDir) {
     
     float v = 0.5 + 0.5*sign(altitudeAngle)*sqrt(abs(altitudeAngle)*2.0/PI);
     vec2 uv = vec2(azimuthAngle / (2.0*PI), v);
-    uv.x = (0.5 + uv.x * 255) / viewWidth;
-    uv.y = (0.5 + uv.y * 127 + 128) / viewHeight;
+    uv.x = (256.5 + uv.x * 255) / LUT_WIDTH;
+    uv.y = (0.5 + uv.y * 255) / LUT_HEIGHT;
     return texture2D(colortex15, uv).rgb;
 }
 
-vec3 LUT_sky_light(vec3 sunDir) {
-	float sunCosZenithAngle = sunDir.y;
-    vec2 uv = vec2((32.5 + 223 * (sunCosZenithAngle * 0.5 + 0.5)) / viewWidth,
-                   67.5 / viewHeight);
+vec3 LUT_sky_light() {
+    vec2 uv = vec2(32.5 / LUT_WIDTH,
+                   67.5 / LUT_HEIGHT);
     return texture2D(colortex15, uv).rgb;
 }
 
@@ -454,7 +456,7 @@ void main() {
     vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
     vec3 moon_dir = normalize(view_coord_to_world_coord(moonPosition));
     float sunmoon_light_mix = smoothstep(0.0, 0.05, sun_dir.y);
-    float sky_brightness = SKY_ILLUMINATION_INTENSITY * grayscale(LUT_sky_light(sun_dir));
+    float sky_brightness = SKY_ILLUMINATION_INTENSITY * grayscale(LUT_sky_light());
 
     float k;
     float eye_brightness = eyeBrightnessSmooth.y / 240.;

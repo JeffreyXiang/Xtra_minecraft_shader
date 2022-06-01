@@ -19,7 +19,6 @@ uniform sampler2D gaux3;
 uniform sampler2D gaux4;
 uniform sampler2D colortex11;
 uniform sampler2D colortex12;
-uniform sampler2D colortex15;
 
 uniform mat4 gbufferModelView;
 uniform mat4 gbufferModelViewInverse;
@@ -85,7 +84,7 @@ int is_dist_match(float dist, vec3 view_dir, vec3 normal_s, vec2 texcoord) {
     return (dist > dist_prev - 2e-3 * k * dist_prev && dist < dist_prev + 2e-3 * k * dist_prev) ? 1 : 0;
 }
 
-/* RENDERTARGETS: 0,1,3,6,7,8,12,15 */
+/* RENDERTARGETS: 0,1,3,6,7,8,12 */
 void main() {
     vec3 color_s = texture2D(gcolor, texcoord).rgb;
     vec3 data_w = texture2D(gdepth, texcoord).rgb;
@@ -134,14 +133,8 @@ void main() {
     
     
     /* INVERSE GAMMA */
-    color_s = pow(color_s, vec3(GAMMA));
-    color_g = pow(color_g, vec3(GAMMA));
-
-    /* LUTS */
-    vec4 LUT_data = vec4(0.0);
-    vec2 LUT_texcoord = vec2(texcoord.x / 256 * viewWidth, texcoord.y / 256 * viewHeight);
-    if (LUT_texcoord.x < 1 && LUT_texcoord.y < 1)
-        LUT_data = texture2D(colortex15, LUT_texcoord);
+    if (block_id_s > 0.5) color_s = pow(color_s, vec3(GAMMA));
+    if (block_id_g > 0.5) color_g = pow(color_g, vec3(GAMMA));
 
     /* MOTION */
     vec2 texcoord_prev = vec2(0.0);
@@ -171,6 +164,4 @@ void main() {
     gl_FragData[4] = vec4(dist_s, dist_w, dist_g, clip_z);
     gl_FragData[5] = vec4(color_s, 0.0);
     gl_FragData[6] = vec4(texcoord_prev, 0.0, has_prev);
-    gl_FragData[7] = LUT_data;
-
 }
