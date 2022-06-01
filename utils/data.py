@@ -30,6 +30,8 @@ data[3:67, :, :3] = atmo.tLUT_np
 data[3:67, :, 3] = 1
 data[67:99, :32, :3] = atmo.msLUT_np
 data[67:99, :32, 3] = 1
+data[67:68, 32:, :3] = atmo.slLUT_np
+data[67:68, 32:, 3] = 1
 
 img = np.array(data)
 img = img * 255

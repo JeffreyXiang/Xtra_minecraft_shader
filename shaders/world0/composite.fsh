@@ -8,6 +8,7 @@
 #define SSGI_ENABLE 1 // [0 1]
 #define GI_TEMPORAL_FILTER_ENABLE 1 // [0 1]
 #define TAA_ENABLE 1 // [0 1]
+#define MOTION_BLUR_ENABLE 1 // [0 1]
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
@@ -145,14 +146,20 @@ void main() {
     /* MOTION */
     vec2 texcoord_prev = vec2(0.0);
     float has_prev = 0;
-#if (SSAO_ENABLE || SSGI_ENABLE) && GI_TEMPORAL_FILTER_ENABLE || TAA_ENABLE
-    vec4 motion_data = texture2D(colortex12, texcoord);
-    vec3 motion = motion_data.xyz;
-    float is_moving = motion_data.w;
-    vec3 previous_view_coord = (is_moving == 1 ? view_coord - motion : view_coord_to_previous_view_coord(view_coord));
-    float previous_dist_s = length(previous_view_coord);
-    texcoord_prev = previous_view_coord_to_previous_screen_coord(previous_view_coord).st;
-    if (texcoord_prev.s > 0 && texcoord_prev.s < 1 && texcoord_prev.t > 0 && texcoord_prev.t < 1 && is_dist_match(previous_dist_s, normalize(view_coord), normal_s, texcoord_prev) == 1) {
+#if (SSAO_ENABLE || SSGI_ENABLE) && GI_TEMPORAL_FILTER_ENABLE || TAA_ENABLE || MOTION_BLUR_ENABLE
+    if (fract(block_id_s + 1e-3) < 0.05) {
+        vec4 motion_data = texture2D(colortex12, texcoord);
+        vec3 motion = motion_data.xyz;
+        float is_moving = motion_data.w;
+        vec3 previous_view_coord = (is_moving == 1 ? view_coord - motion : view_coord_to_previous_view_coord(view_coord));
+        float previous_dist_s = length(previous_view_coord);
+        texcoord_prev = previous_view_coord_to_previous_screen_coord(previous_view_coord).st;
+        if (texcoord_prev.s > 0 && texcoord_prev.s < 1 && texcoord_prev.t > 0 && texcoord_prev.t < 1 && is_dist_match(previous_dist_s, normalize(view_coord), normal_s, texcoord_prev) == 1) {
+            has_prev = 1;
+        }
+    }
+    else {
+        texcoord_prev = texcoord;
         has_prev = 1;
     }
 #endif

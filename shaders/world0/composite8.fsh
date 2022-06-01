@@ -4,20 +4,30 @@
 
 #define GAMMA 2.2   //[1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0]
 
-#define MOON_INTENSITY 2.533e-6
-#define SUN_SRAD 2.101e1
+#define MOON_INTENSITY 2e-5
+#define SUN_SRAD 2e1
+#define MOON_SRAD 5e1
 
 #define SKY_ILLUMINATION_INTENSITY 20.0  //[5.0 10.0 15.0 20.0 25.0 30.0 35.0 40.0 45.0 50.0]
 
 #define SSR_STEP_MAX_ITER 36
 #define SSR_DIV_MAX_ITER 6
 #define SSR_F0 0.04
-#define SSR_ETA 1.05
+#define SSR_ETA 1.2
 
-#define FOG_AIR_DECAY 0.001     //[0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01 0.02 0.05]
+#define FOG_AIR_DECAY 0.001     //[0.0 0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01 0.02 0.05]
 #define FOG_AIR_THICKNESS 256
 #define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
 #define FOG_WATER_THICKNESS 32
+
+#define BLOOM_ENABLE 1 // [0 1]
+
+#define EXPOSURE 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+#define AUTO_EXPOSURE_ENABLE 1 // [0 1]
+#define TONEMAP_ENABLE 1 // [0 1]
+#define TONE_R 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+#define TONE_G 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+#define TONE_B 1.0 //[0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
 
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
@@ -35,7 +45,7 @@ uniform sampler2D noisetex;
 uniform float far;
 uniform vec3 shadowLightPosition;
 uniform vec3 sunPosition;
-uniform float sunAngle;
+uniform vec3 moonPosition;
 uniform vec3 fogColor;
 uniform vec3 skyColor;
 uniform float frameTimeCounter;
@@ -115,6 +125,13 @@ float fog(float dist, float decay) {
     return 1 / dist;
 }
 
+vec3 jodieReinhardTonemap(vec3 c){
+    // From: https://www.shadertoy.com/view/tdSXzD
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 tc = c / (c + 1.0);
+    return mix(c / (l + 1.0), tc, tc);
+}
+
 vec3 LUT_water_scattering(float decay) {
     return texture2D(colortex15, vec2((0.5 + (1 - decay) * 255) / viewWidth, 2.5 / viewHeight)).rgb * 0.5;
 }
@@ -150,7 +167,14 @@ vec3 LUT_sky(vec3 rayDir) {
     float v = 0.5 + 0.5*sign(altitudeAngle)*sqrt(abs(altitudeAngle)*2.0/PI);
     vec2 uv = vec2(azimuthAngle / (2.0*PI), v);
     uv.x = (0.5 + uv.x * 255) / viewWidth;
-    uv.y = (0.5 + uv.y * 127 + 99) / viewHeight;
+    uv.y = (0.5 + uv.y * 127 + 128) / viewHeight;
+    return texture2D(colortex15, uv).rgb;
+}
+
+vec3 LUT_sky_light(vec3 sunDir) {
+	float sunCosZenithAngle = sunDir.y;
+    vec2 uv = vec2((32.5 + 223 * (sunCosZenithAngle * 0.5 + 0.5)) / viewWidth,
+                   67.5 / viewHeight);
     return texture2D(colortex15, uv).rgb;
 }
 
@@ -171,7 +195,7 @@ vec3 cal_water_color(float self_lum, float target_lum, float y_diff, float decay
 vec3 cal_sun_bloom(vec3 ray_dir, vec3 sun_dir) {
     vec3 color = vec3(0.0);
 
-    const float sun_solid_angle = 2 * PI / 180.0;
+    const float sun_solid_angle = 1 * PI / 180.0;
     const float min_sun_cos_theta = cos(sun_solid_angle);
 
     float cos_theta = dot(ray_dir, sun_dir);
@@ -188,7 +212,27 @@ vec3 cal_sun_bloom(vec3 ray_dir, vec3 sun_dir) {
     return color;
 }
 
-/* DRAWBUFFERS: 08 */
+vec3 cal_moon_bloom(vec3 ray_dir, vec3 moon_dir) {
+    vec3 color = vec3(0.0);
+
+    const float moon_solid_angle = 1 * PI / 180.0;
+    const float min_moon_cos_theta = cos(moon_solid_angle);
+
+    float cos_theta = dot(ray_dir, moon_dir);
+    if (cos_theta >= min_moon_cos_theta) {
+        color += MOON_SRAD * vec3(MOON_INTENSITY);
+    }
+    else {
+        float offset = min_moon_cos_theta - cos_theta;
+        float gaussian_bloom = exp(-offset * 5000.0) * 0.5;
+        float inv_bloom = 1.0/(1 + offset * 5000.0) * 0.5;
+        color += 10 * (gaussian_bloom + inv_bloom) * smoothstep(-0.05, 0.05, moon_dir.y) * vec3(MOON_INTENSITY);
+    }
+
+    return color;
+}
+
+/* RENDERTARGETS: 0,3,8 */
 void main() {
     vec3 color_s;
     float block_id_s, sky_light_s;
@@ -406,6 +450,12 @@ void main() {
     }
 
     /* LIGHT PROPAGATION */
+
+    vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
+    vec3 moon_dir = normalize(view_coord_to_world_coord(moonPosition));
+    float sunmoon_light_mix = smoothstep(0.0, 0.05, sun_dir.y);
+    float sky_brightness = SKY_ILLUMINATION_INTENSITY * grayscale(LUT_sky_light(sun_dir));
+
     float k;
     float eye_brightness = eyeBrightnessSmooth.y / 240.;
     vec3 fog_color = eye_brightness * fogColor * SKY_ILLUMINATION_INTENSITY / 4;
@@ -416,10 +466,8 @@ void main() {
     dist_s = texture2D(gaux4, texcoord_s).x;
     if (isEyeInWater == 0) {
         if (depth_w < 1.5 && !(isEyeInWater == 1 && depth_g < depth_w)) {
-            vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
             vec3 sun_light = LUT_sun_color(sun_dir);
             vec3 moon_light = vec3(MOON_INTENSITY);
-            float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_dir.y);
             vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sunmoon_light_mix);
             k = fog(dist_s - dist_w, FOG_WATER_DECAY);
             float y_s = view_coord_to_world_coord(screen_coord_to_view_coord(vec3(texcoord_s, depth_s))).y;
@@ -433,7 +481,7 @@ void main() {
             else {
                 vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_w * 100));
                 reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * LUT_sky(ray_dir);
-                reflect_color_w += SKY_ILLUMINATION_INTENSITY * sky_light_w / fr_w * cal_sun_bloom(ray_dir, sun_dir);
+                reflect_color_w += SKY_ILLUMINATION_INTENSITY * sky_light_w / fr_w * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                 reflect_color_w = mix(fog_color, reflect_color_w, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
             }
             reflect_color_w = mix(fog_color, reflect_color_w, fog(dist_w, FOG_AIR_DECAY));
@@ -448,10 +496,9 @@ void main() {
                         reflect_color_g = mix(fog_color, reflect_color_g, fog(reflect_dist_g, FOG_AIR_DECAY));
                     }
                     else {
-                        vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
                         vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
                         reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
-                        reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g / fr_g * cal_sun_bloom(ray_dir, sun_dir);
+                        reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g / fr_g * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                         reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
                     }
                     color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
@@ -475,10 +522,9 @@ void main() {
                     reflect_color_g = mix(fog_color, reflect_color_g, fog(reflect_dist_g, FOG_AIR_DECAY));
                 }
                 else {
-                    vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
                     vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
                     reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
-                    reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g / fr_g * cal_sun_bloom(ray_dir, sun_dir);
+                    reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g / fr_g * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                     reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
                 }
                 color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
@@ -487,10 +533,8 @@ void main() {
         }
     }
     else if (isEyeInWater == 1) {
-        vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
         vec3 sun_light = LUT_sun_color(sun_dir);
         vec3 moon_light = vec3(MOON_INTENSITY);
-        float sunmoon_light_mix = smoothstep(-0.05, 0.05, sun_dir.y);
         vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sunmoon_light_mix);
         if (depth_w < 1.5 && !(isEyeInWater == 1 && depth_g < depth_w)) {
             color_s = mix(fog_color, color_s, fog(block_id_s > 0.5 ? dist_s - dist_w : FOG_AIR_THICKNESS, FOG_AIR_DECAY));
@@ -547,22 +591,41 @@ void main() {
         }
     }
 
+    vec3 color;
+    if (depth_w > depth_g) {
+        color = (1 - fr_w) * color_s + fr_w * reflect_color_w;
+    }
+    else {
+        color = (1 - alpha) * (1 - fr_w) * color_s + (1 - fr_w) * color_g + fr_w * reflect_color_w;
+        color_g *= 0;
+        alpha = 0;
+    }
+
     /* BLOOM EXTRACT */
     vec3 bloom_color = vec3(0.0);
-    // if (block_id_s > 1.5) {
-    //     bloom_color = pow((1 - alpha) * (1 - fr_w) * color_s * clamp(1 / eye_brightness / SKY_ILLUMINATION_INTENSITY, 0.25, 3), vec3(1 / GAMMA));
-    //     bloom_color = mix(vec3(0.0), bloom_color, smoothstep(0.4, 0.6, grayscale(bloom_color)));
-    // }
-    // else if (block_id_s > 0.5){
-    //     bloom_color = pow((1 - alpha) * (1 - fr_w) * color_s, vec3(1 / GAMMA));
-    //     bloom_color = 0.5 * mix(vec3(0.0), bloom_color, smoothstep(1.5, 2, grayscale(bloom_color)));
-    // }
+    #if BLOOM_ENABLE
+        color_s *= (1 - alpha) * (1 - fr_w);
 
+        /* EXPOSURE ADJUST */
+        #if AUTO_EXPOSURE_ENABLE
+        eye_brightness = (isEyeInWater == 1 ? 1 : eyeBrightnessSmooth.y / 240.0);
+        eye_brightness = sky_brightness * eye_brightness * eye_brightness;
+        float ae_k = clamp(0.2 / eye_brightness, 0.25, 10);
+        color_s *= ae_k; 
+        #endif
 
-    if (depth_w > depth_g)
-        color_s = (1 - alpha) * (1 - fr_w) * color_s + color_g + (1 - alpha) * fr_w * reflect_color_w;
-    else
-        color_s = (1 - alpha) * (1 - fr_w) * color_s + (1 - fr_w) * color_g + fr_w * reflect_color_w;
-    gl_FragData[0] = vec4(color_s, 1.0);
-    gl_FragData[1] = vec4(bloom_color, 1.0);
+        vec3 tone_k = pow(EXPOSURE, GAMMA) * vec3(TONE_R, TONE_G, TONE_B);
+        color_s *= tone_k;
+
+        /* GAMMA */
+        color_s = pow(color_s, vec3(1 / GAMMA));
+        
+        if (block_id_s > 1.5) {
+            bloom_color = mix(vec3(0.0), color_s, smoothstep(0.5, 1, grayscale(color_s)));
+        }
+    #endif
+
+    gl_FragData[0] = vec4(color, 1.0);
+    gl_FragData[1] = vec4(color_g, alpha);
+    gl_FragData[2] = vec4(bloom_color, 1.0);
 }

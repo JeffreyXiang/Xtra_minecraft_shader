@@ -1,8 +1,5 @@
 import numpy as np
 import taichi as ti
-from scipy import interpolate
-import imageio
-from tqdm import tqdm
 
 ti.init(arch=ti.gpu, default_fp =ti.f64)  # Try to run on GPU
 
@@ -322,20 +319,27 @@ def cal_skyLUT(sun_angle: ti.f64):
             lum += scattering_integral * transmittance
             transmittance *= sample_transmittance
 
-        skyLUT[i, j] = (lum * 5) ** (1 / 2.2)
+        skyLUT[i, j] = lum
 
 
 cal_tLUT()
 cal_msLUT()
 
+
 tLUT_np = tLUT.to_numpy()
 msLUT_np = msLUT.to_numpy()
+slLUT_np = np.zeros((224, 1, 3))
+for idx, sun_height in enumerate(np.linspace(-1, 1, 224)):
+    cal_skyLUT(np.arcsin(sun_height))
+    slLUT_np[idx] = skyLUT.to_numpy()[:, 128:].mean(axis=0).mean(axis=0)
 
 ti.tools.imwrite(tLUT_np, './utils/atmosphere_transmittance.png')
 ti.tools.imwrite(msLUT_np * 5, './utils/atmosphere_multiple_scattering.png')
+ti.tools.imwrite(slLUT_np * 5, './utils/atmosphere_sky_light.png')
 
 tLUT_np = tLUT_np.transpose(1, 0, 2)
 msLUT_np = msLUT_np.transpose(1, 0, 2)
+slLUT_np = slLUT_np.transpose(1, 0, 2)
 
 if __name__ == '__main__':
     gui = ti.GUI('Atmosphere', (256, 256))
