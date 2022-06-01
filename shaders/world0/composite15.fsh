@@ -8,7 +8,9 @@
 uniform sampler2D gcolor;
 uniform sampler2D colortex12;
 
+#if MOTION_BLUR_ENABLE
 const bool gcolorMipmapEnabled = true;
+#endif
 
 uniform float viewWidth;
 uniform float viewHeight;

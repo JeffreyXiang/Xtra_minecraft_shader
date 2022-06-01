@@ -12,10 +12,14 @@ uniform sampler2D composite;
 uniform sampler2D gaux4;
 uniform sampler2D colortex8;
 
+#if DOF_ENABLE
 const bool gcolorMipmapEnabled = true;
 const bool compositeMipmapEnabled = true;
 const bool gaux4MipmapEnabled = true;
+#endif
+#if BLOOM_ENABLE
 const bool colortex8MipmapEnabled = true;
+#endif
 
 uniform float centerDepthSmooth;
 

@@ -43,8 +43,10 @@ uniform sampler2D gaux4;
 uniform sampler2D colortex8;
 uniform sampler2D colortex15;
 
+#if DOF_ENABLE
 const bool gcolorMipmapEnabled = true;
 const bool compositeMipmapEnabled = true;
+#endif
 
 varying vec2 texcoord;
 
