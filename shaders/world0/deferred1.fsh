@@ -2,14 +2,36 @@
 
 #define PI 3.1415926535898
 
+#define MOON_INTENSITY 2e-5
+#define SUN_SRAD 2e1
+#define MOON_SRAD 5e1
+
+#define SKY_ILLUMINATION_INTENSITY 20.0  //[5.0 10.0 15.0 20.0 25.0 30.0 35.0 40.0 45.0 50.0]
+
 #define ATMOSPHERE_SAMPLES 32
+
+#define CLOUDS_ENABLE 1 // [0 1]
+#define CLOUDS_SAMPLES 32
+#define CLOUDS_WIND vec2(0.26861928, 0.96324643)
+#define CLOUDS_NV0 vec2(-0.0806,  0.1613)
+#define CLOUDS_NV1 vec2(-0.0602, -0.1844)
+#define CLOUDS_NV2 vec2( 0.1758,  0.1074)
+#define CLOUDS_NV3 vec2(-0.0480, -0.0813)
+#define CLOUDS_NV4 vec2( 0.2454,  0.2085)
+#define CLOUDS_NV5 vec2( 0.0343, -0.3817)
 
 #define LUT_WIDTH 512
 #define LUT_HEIGHT 512
 
+#if CLOUDS_ENABLE
+uniform sampler2D noisetex;
+uniform sampler3D colortex14;
+#endif
 uniform sampler2D colortex15;
 
 uniform vec3 sunPosition;
+uniform vec3 cameraPosition;
+uniform float frameTimeCounter;
 
 uniform mat4 gbufferModelViewInverse;
 
@@ -33,7 +55,7 @@ const float mieAbsorptionBase = 4.4;
 
 const vec3 ozoneAbsorptionBase = vec3(0.650, 1.881, .085);
 
-const vec3 viewPos = vec3(0.0, groundRadiusMM + 0.0001, 0.0);
+const vec3 viewPos = vec3(0.0, groundRadiusMM, 0.0);
 
 vec3 LUT_atmosphere_transmittance(vec3 pos, vec3 sunDir) {
     float height = length(pos);
@@ -69,21 +91,22 @@ float getRayleighPhase(float cosTheta) {
     return k * (1.0 + cosTheta * cosTheta);
 }
 
-float rayIntersectSphere(vec3 ro, vec3 rd, float rad) {
+vec2 rayIntersectSphere(vec3 ro, vec3 rd, float rad) {
     float b = dot(ro, rd);
     float c = dot(ro, ro) - rad*rad;
-    if (c > 0.0f && b > 0.0) return -1.0;
+    if (c > 0.0f && b > 0.0) return vec2(-1.0);
     float discr = b*b - c;
-    if (discr < 0.0) return -1.0;
-    // Special case: inside sphere, use far discriminant
-    if (discr > b*b) return (-b + sqrt(discr));
-    return -b - sqrt(discr);
+    if (discr < 0.0) return vec2(-1.0);
+    discr = sqrt(discr);
+    return vec2(-b - discr, -b + discr);
 }
 
-void getScatteringValues(vec3 pos, 
-                         out vec3 rayleighScattering, 
-                         out float mieScattering,
-                         out vec3 extinction) {
+void getScatteringValues(
+        vec3 pos, 
+        out vec3 rayleighScattering, 
+        out float mieScattering,
+        out vec3 extinction
+    ) {
     float altitudeKM = (length(pos)-groundRadiusMM)*1000.0;
     // Note: Paper gets these switched up.
     float rayleighDensity = min(exp(-altitudeKM/8.0), 10);
@@ -100,21 +123,26 @@ void getScatteringValues(vec3 pos,
     extinction = rayleighScattering + rayleighAbsorption + mieScattering + mieAbsorption + ozoneAbsorption;
 }
 
-vec3 raymarchScattering(vec3 pos, 
-                        vec3 rayDir, 
-                        vec3 sunDir,
-                        float tMax,
-                        int numSteps) {
+void raymarchScattering(
+        vec3 pos, 
+        vec3 rayDir, 
+        vec3 sunDir,
+        float tMin,
+        float tMax,
+        int numSteps,
+        out vec3 lum,
+        out vec3 transmittance
+    ) {
     float cosTheta = dot(rayDir, sunDir);
     
 	float miePhaseValue = getMiePhase(cosTheta);
 	float rayleighPhaseValue = getRayleighPhase(-cosTheta);
     
-    vec3 lum = vec3(0.0);
-    vec3 transmittance = vec3(1.0);
-    float t = 0.0;
+    lum = vec3(0.0);
+    transmittance = vec3(1.0);
+    float t = tMin;
     for (int i = 0; i < numSteps; i++) {
-        float newT = ((i + 0.3)/numSteps)*tMax;
+        float newT = tMin + ((i + 0.3)/numSteps)*(tMax - tMin);
         float dt = newT - t;
         t = newT;
         
@@ -140,45 +168,209 @@ vec3 raymarchScattering(vec3 pos,
         
         transmittance *= sampleTransmittance;
     }
-    return lum;
 }
+
+#if CLOUDS_ENABLE
+const float cloudBottomRadiusMM = 6.3605;
+const float cloudHeightMM = 0.001;
+const float cloudRenderMaxRadiusMM = 6.38;
+
+float cloud_weight(float cloud_fract) {
+    return smoothstep(0, 0.02, cloud_fract) * smoothstep(0.9, 0.98, 1 - cloud_fract);
+}
+
+float remap(float v, float ori_l, float ori_h, float new_l, float new_h) {
+    return clamp((v - ori_l) / (ori_h - ori_l), 0, 1) * (new_h - new_l) + new_l;
+}
+
+void raymarchClouds(
+        vec3 pos, 
+        vec3 rayDir, 
+        vec3 sunDir,
+        float tMin,
+        float tMax,
+        int numSteps,
+        out vec3 lum,
+        out float transmittance
+    ) {
+    lum = vec3(0.0);
+    transmittance = 1.0;
+    float sunmoon_light_mix = smoothstep(0.0, 0.05, sunDir.y);
+    float t = tMin;
+    for (int i = 0; i < numSteps; i++) {
+        float newT = tMin + ((i + 0.3)/numSteps)*(tMax - tMin);
+        float dt = newT - t;
+        t = newT;
+        
+        vec3 newPos = pos + t*rayDir;
+        float cloud_fract = 0.1 * (length(newPos) - cloudBottomRadiusMM) / cloudHeightMM;
+
+        float offset = (
+            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV0)).r +
+            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV1)).r +
+            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV2)).g +
+            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV3)).g +
+            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV4)).b +
+            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV5)).b - 3
+            ) / 6;
+
+        float extinction = 1e4 * cloud_weight(cloud_fract) * remap(
+            texture3D(colortex14, vec3(
+                newPos.xz / 0.0219721 + frameTimeCounter * CLOUDS_WIND * 2e-3,
+                cloud_fract - frameTimeCounter * 5e-3 + offset)).r,
+            0.7, 1, 0, 1);
+        float sampleTransmittance = exp(-dt*extinction);
+        extinction *= 1e-5;
+        vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(vec3(MOON_INTENSITY), LUT_atmosphere_transmittance(newPos, sunDir), sunmoon_light_mix);
+        vec3 scatteringIntegral = sampleTransmittance * exp(-extinction) * (1 - exp(-2 * extinction)) * sunmoon_light;
+
+        lum += scatteringIntegral*transmittance;
+        transmittance *= sampleTransmittance;
+    }
+}
+#endif
 
 /* RENDERTARGETS: 15 */
 void main() {
-    /* LUT SKY */
+    vec3 view_pos = viewPos + vec3(0, cameraPosition.y * 1e-6, 0);
     vec4 LUT_data = texture2D(colortex15, texcoord);
-    vec2 LUT_texcoord = vec2((texcoord.x * LUT_WIDTH - 256) / 256 , texcoord.y * LUT_HEIGHT / 256);
 
+    float height = length(view_pos);
+    float horizonAngle = height > groundRadiusMM ? -asin(sqrt(height * height - groundRadiusMM * groundRadiusMM) / height) : 0;
+
+    /* LUT SKY */
+    vec2 LUT_texcoord = vec2((texcoord.x * LUT_WIDTH - 256) / 256 , (texcoord.y * LUT_HEIGHT) / 256);
     if (LUT_texcoord.x > 0 && LUT_texcoord.x < 1 && LUT_texcoord.y > 0 && LUT_texcoord.y < 1) {
         float u = (LUT_texcoord.x * 256 - 0.5) / 255;
         float v = (LUT_texcoord.y * 256 - 0.5) / 255;
         
         float azimuthAngle = (u - 0.5) * 2.0 * PI;
-        float adjV;
-        if (v < 0.5) {
-            float coord = 1.0 - 2.0*v;
-            adjV = -coord*coord;
-        } else {
-            float coord = v*2.0 - 1.0;
-            adjV = coord*coord;
-        }
         
-        float height = length(viewPos);
-        vec3 up = viewPos / height;
-        float horizonAngle = acos(sqrt(height * height - groundRadiusMM * groundRadiusMM) / height) - 0.5 * PI;
-        float altitudeAngle = adjV*0.5*PI - horizonAngle;
+        float coord = 2 * v - 1;
+        float altitudeAngle = coord*coord*(sign(coord)*0.5*PI-horizonAngle) + horizonAngle;
         
         float cosAltitude = cos(altitudeAngle);
         vec3 rayDir = vec3(cosAltitude*sin(azimuthAngle), sin(altitudeAngle), -cosAltitude*cos(azimuthAngle));
         
         vec3 sunDir = normalize(view_coord_to_world_coord(sunPosition));
         
-        float atmoDist = rayIntersectSphere(viewPos, rayDir, atmosphereRadiusMM);
-        float groundDist = rayIntersectSphere(viewPos, rayDir, groundRadiusMM);
-        float tMax = (groundDist < 0.0) ? atmoDist : min(groundDist+1, atmoDist);
-        vec3 lum = raymarchScattering(viewPos, rayDir, sunDir, tMax, ATMOSPHERE_SAMPLES);
+        float tMin, tMax;
+        vec3 lum=vec3(0.0), transmittance=vec3(1.0);
+        vec2 atmoDist = rayIntersectSphere(view_pos, rayDir, atmosphereRadiusMM);
+        vec2 groundDist = rayIntersectSphere(view_pos, rayDir, groundRadiusMM);
+        if (atmoDist.y > 0) {
+            if (height < groundRadiusMM) {
+                tMin = 0;
+                tMax = min(1, atmoDist.y);
+            }
+            else if (height < atmosphereRadiusMM) {
+                float k = (atmosphereRadiusMM - height)/(atmosphereRadiusMM-groundRadiusMM);
+                k = k * k;
+                k = k * k;
+                k = k * k;
+                k = k * k;
+                tMin = 0;
+                tMax = (groundDist.x < 0.0) ? atmoDist.y : min(groundDist.x+1*k, atmoDist.y);
+            }
+            else {
+                tMin = atmoDist.x;
+                tMax = (groundDist.x < 0.0) ? atmoDist.y : min(groundDist.x, atmoDist.y);
+            }
+            raymarchScattering(view_pos, rayDir, sunDir, tMin, tMax, ATMOSPHERE_SAMPLES, lum, transmittance);
+        }
+
         LUT_data = vec4(lum, 1.0);
     }
+
+    /* LUT CLOUDS */
+    #if CLOUDS_ENABLE
+    if (height < cloudRenderMaxRadiusMM) {
+        /* CLOUDS */
+        LUT_texcoord = vec2((texcoord.x * LUT_WIDTH) / 256 , (texcoord.y * LUT_HEIGHT - 256) / 256);
+        if (LUT_texcoord.x > 0 && LUT_texcoord.x < 1 && LUT_texcoord.y > 0 && LUT_texcoord.y < 1) {
+            float u = (LUT_texcoord.x * 256 - 0.5) / 255;
+            float v = (LUT_texcoord.y * 256 - 0.5) / 255;
+            
+            float azimuthAngle = (u - 0.5) * 2.0 * PI;
+            
+            float coord = 2 * v - 1;
+            float altitudeAngle = coord*coord*(sign(coord)*0.5*PI-horizonAngle) + horizonAngle;
+            
+            float cosAltitude = cos(altitudeAngle);
+            vec3 rayDir = vec3(cosAltitude*sin(azimuthAngle), sin(altitudeAngle), -cosAltitude*cos(azimuthAngle));
+            
+            vec3 sunDir = normalize(view_coord_to_world_coord(sunPosition));
+            
+            float tMin, tMax;
+            vec3 lum=vec3(0.0);
+            float transmittance=1.0;
+            vec2 atmoDist = rayIntersectSphere(view_pos, rayDir, atmosphereRadiusMM);
+            vec2 groundDist = rayIntersectSphere(view_pos, rayDir, groundRadiusMM);
+            if (atmoDist.y > 0) {
+                    vec2 cloudBottomDist = rayIntersectSphere(view_pos, rayDir, cloudBottomRadiusMM);
+                    vec2 cloudTopDist = rayIntersectSphere(view_pos, rayDir, cloudBottomRadiusMM+cloudHeightMM);
+                    if (height < cloudBottomRadiusMM) {
+                        tMin = cloudBottomDist.y;
+                        tMax = cloudTopDist.y;
+                    }
+                    else if (height < cloudBottomRadiusMM+cloudHeightMM) {
+                        tMin = 0;
+                        tMax = cloudBottomDist.x > 0 ? cloudBottomDist.x : cloudTopDist.y;
+                    }
+                    else {
+                        tMin = cloudTopDist.x;
+                        tMax = cloudBottomDist.x > 0 ? cloudBottomDist.x : cloudTopDist.y;
+                    }
+                    if ((groundDist.x < 0 || groundDist.x > tMin) && tMax > 0 && tMax > tMin) {
+                        raymarchClouds(view_pos, rayDir, sunDir, tMin, tMax, CLOUDS_SAMPLES, lum, transmittance);
+                    }
+            }
+            LUT_data = vec4(lum, transmittance);
+        }
+
+        /* ATMOSPHERE */
+        LUT_texcoord = vec2((texcoord.x * LUT_WIDTH - 256) / 256, (texcoord.y * LUT_HEIGHT - 256) / 256);
+        if (LUT_texcoord.x > 0 && LUT_texcoord.x < 1 && LUT_texcoord.y > 0 && LUT_texcoord.y < 1) {
+            float u = (LUT_texcoord.x * 256 - 0.5) / 255;
+            float v = (LUT_texcoord.y * 256 - 0.5) / 255;
+            
+            float azimuthAngle = (u - 0.5) * 2.0 * PI;
+            
+            float coord = 2 * v - 1;
+            float altitudeAngle = coord*coord*(sign(coord)*0.5*PI-horizonAngle) + horizonAngle;
+            
+            float cosAltitude = cos(altitudeAngle);
+            vec3 rayDir = vec3(cosAltitude*sin(azimuthAngle), sin(altitudeAngle), -cosAltitude*cos(azimuthAngle));
+            
+            vec3 sunDir = normalize(view_coord_to_world_coord(sunPosition));
+            
+            float tMin, tMax;
+            vec3 lum=vec3(0.0), transmittance=vec3(1.0);
+            vec2 atmoDist = rayIntersectSphere(view_pos, rayDir, atmosphereRadiusMM);
+            vec2 groundDist = rayIntersectSphere(view_pos, rayDir, groundRadiusMM);
+            if (atmoDist.y > 0) {
+                    vec2 cloudBottomDist = rayIntersectSphere(view_pos, rayDir, cloudBottomRadiusMM);
+                    vec2 cloudTopDist = rayIntersectSphere(view_pos, rayDir, cloudBottomRadiusMM+cloudHeightMM);
+                    if (height < cloudBottomRadiusMM) {
+                        tMin = cloudBottomDist.y;
+                        tMax = cloudTopDist.y;
+                    }
+                    else if (height < cloudBottomRadiusMM+cloudHeightMM) {
+                        tMin = 0;
+                        tMax = cloudBottomDist.x > 0 ? cloudBottomDist.x : cloudTopDist.y;
+                    }
+                    else {
+                        tMin = cloudTopDist.x;
+                        tMax = cloudBottomDist.x > 0 ? cloudBottomDist.x : cloudTopDist.y;
+                    }
+                    if ((groundDist.x < 0 || groundDist.x > tMin) && tMax > 0 && tMin > 0) {
+                        raymarchScattering(view_pos, rayDir, sunDir, 0, tMin, ATMOSPHERE_SAMPLES / 8, lum, transmittance);
+                    }
+            }
+            LUT_data = vec4(lum, 1.0);
+        }
+    }
+    #endif
     
     gl_FragData[0] = LUT_data;
 }

@@ -17,7 +17,7 @@ void main() {
     vec4 LUT_data = texture2D(colortex15, texcoord);
 
     if (texcoord.s > 32. / LUT_WIDTH && texcoord.s < 33. / LUT_WIDTH && texcoord.t > 67. / LUT_HEIGHT && texcoord.t < 68. / LUT_HEIGHT)
-        LUT_data = texture2DLod(colortex15, vec2(128. / LUT_WIDTH, 192. / LUT_HEIGHT), 7);
+        LUT_data = texture2DLod(colortex15, vec2(128. / LUT_WIDTH, 448. / LUT_HEIGHT), 7);
 
     gl_FragData[0] = LUT_data;
 }

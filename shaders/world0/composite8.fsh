@@ -148,16 +148,16 @@ vec3 LUT_sun_color(vec3 sunDir) {
 
 const float groundRadiusMM = 6.360;
 const float atmosphereRadiusMM = 6.460;
-const vec3 viewPos = vec3(0.0, groundRadiusMM + 0.0001, 0.0);
+const vec3 viewPos = vec3(0.0, groundRadiusMM, 0.0);
 
-vec3 LUT_sky(vec3 rayDir) {
+vec3 LUT_sky_reflect(vec3 viewPos, vec3 rayDir) {
     float height = length(viewPos);
     vec3 up = viewPos / height;
     
-    float horizonAngle = acos(sqrt(height * height - groundRadiusMM * groundRadiusMM) / height);
-    float altitudeAngle = horizonAngle - acos(dot(rayDir, up)); // Between -PI/2 and PI/2
+    float horizonAngle = height > groundRadiusMM ? -asin(sqrt(height * height - groundRadiusMM * groundRadiusMM) / height) : 0;
+    float altitudeAngle = asin(dot(rayDir, up)) - horizonAngle; // Between -PI/2 and PI/2
     float azimuthAngle; // Between 0 and 2*PI
-    if (abs(altitudeAngle) > (0.5*PI - .0001)) {
+    if (abs(rayDir.y) > (1 - 1e-6)) {
         // Looking nearly straight up or down.
         azimuthAngle = 0.0;
     } else {
@@ -166,12 +166,12 @@ vec3 LUT_sky(vec3 rayDir) {
         float cosTheta = -projectedDir.z;
         azimuthAngle = atan(sinTheta, cosTheta) + PI;
     }
-    
-    float v = 0.5 + 0.5*sign(altitudeAngle)*sqrt(abs(altitudeAngle)*2.0/PI);
-    vec2 uv = vec2(azimuthAngle / (2.0*PI), v);
-    uv.x = (256.5 + uv.x * 255) / LUT_WIDTH;
-    uv.y = (0.5 + uv.y * 255) / LUT_HEIGHT;
-    return texture2D(colortex15, uv).rgb;
+    float u = azimuthAngle / (2.0*PI);
+    float v = 0.5 + 0.5*sign(altitudeAngle)*sqrt(altitudeAngle/(sign(altitudeAngle)*0.5*PI-horizonAngle));
+    return texture2D(colortex15, vec2(
+        (0.5 + u * 255) / LUT_WIDTH,
+        (256.5 + v * 255) / LUT_HEIGHT
+    )).rgb;
 }
 
 vec3 LUT_sky_light() {
@@ -452,7 +452,7 @@ void main() {
     }
 
     /* LIGHT PROPAGATION */
-
+    vec3 view_pos = viewPos + vec3(0, cameraPosition.y * 1e-6, 0);
     vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
     vec3 moon_dir = normalize(view_coord_to_world_coord(moonPosition));
     float sunmoon_light_mix = smoothstep(0.0, 0.05, sun_dir.y);
@@ -482,7 +482,7 @@ void main() {
             }
             else {
                 vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_w * 100));
-                reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * LUT_sky(ray_dir);
+                reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * LUT_sky_reflect(view_pos, ray_dir);
                 reflect_color_w += SKY_ILLUMINATION_INTENSITY * sky_light_w / fr_w * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                 reflect_color_w = mix(fog_color, reflect_color_w, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
             }
@@ -499,7 +499,7 @@ void main() {
                     }
                     else {
                         vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
-                        reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
+                        reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky_reflect(view_pos, ray_dir);
                         reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g / fr_g * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                         reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
                     }
@@ -525,7 +525,7 @@ void main() {
                 }
                 else {
                     vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
-                    reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky(ray_dir);
+                    reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky_reflect(view_pos, ray_dir);
                     reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g / fr_g * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                     reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
                 }
