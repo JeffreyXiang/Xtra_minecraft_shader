@@ -11,7 +11,10 @@
 #define ATMOSPHERE_SAMPLES 32
 
 #define CLOUDS_ENABLE 1 // [0 1]
-#define CLOUDS_SAMPLES 32
+#define CLOUDS_RATIO 0.3 // [0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
+#define CLOUDS_SAMPLES 128
+#define CLOUDS_SCATTER_BASE 10000
+#define CLOUDS_ABSORB_BASE 10000
 #define CLOUDS_WIND vec2(0.26861928, 0.96324643)
 #define CLOUDS_NV0 vec2(-0.0806,  0.1613)
 #define CLOUDS_NV1 vec2(-0.0602, -0.1844)
@@ -197,8 +200,18 @@ void raymarchClouds(
     transmittance = 1.0;
     float sunmoon_light_mix = smoothstep(0.0, 0.05, sunDir.y);
     float t = tMin;
+    float divide = tMin + cloudHeightMM;
+    float sqrt_divide;
+    if (divide < tMax) {
+        sqrt_divide = sqrt(tMin + cloudHeightMM);
+        tMax = sqrt(tMax) * sqrt_divide;
+    }
     for (int i = 0; i < numSteps; i++) {
         float newT = tMin + ((i + 0.3)/numSteps)*(tMax - tMin);
+        if (newT > divide) {
+            newT /= sqrt_divide;
+            newT = newT * newT;
+        }
         float dt = newT - t;
         t = newT;
         
@@ -214,15 +227,19 @@ void raymarchClouds(
             texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV5)).b - 3
             ) / 6;
 
-        float extinction = 1e4 * cloud_weight(cloud_fract) * remap(
+        float density = cloud_weight(cloud_fract) * remap(
             texture3D(colortex14, vec3(
                 newPos.xz / 0.0219721 + frameTimeCounter * CLOUDS_WIND * 2e-3,
                 cloud_fract - frameTimeCounter * 5e-3 + offset)).r,
-            0.7, 1, 0, 1);
+            1 - CLOUDS_RATIO, 1, 0, 1);
+        float extinction = (CLOUDS_SCATTER_BASE + CLOUDS_ABSORB_BASE) * density;
+        float scatterring = CLOUDS_SCATTER_BASE * density;
         float sampleTransmittance = exp(-dt*extinction);
-        extinction *= 1e-5;
-        vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(vec3(MOON_INTENSITY), LUT_atmosphere_transmittance(newPos, sunDir), sunmoon_light_mix);
-        vec3 scatteringIntegral = sampleTransmittance * exp(-extinction) * (1 - exp(-2 * extinction)) * sunmoon_light;
+        float k = density * 1;
+        vec3 sunmoon_light = mix(vec3(MOON_INTENSITY), LUT_atmosphere_transmittance(newPos, sunDir), sunmoon_light_mix);
+        vec3 scatteringIntegral = scatterring * (1 - sampleTransmittance) / (extinction + 1e-6)
+            * exp(-k) * (1 - exp(-2 * k))
+            * sunmoon_light;
 
         lum += scatteringIntegral*transmittance;
         transmittance *= sampleTransmittance;

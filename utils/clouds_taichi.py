@@ -81,7 +81,7 @@ def cal_perlin(cells=8):
     return perlin_noise.to_numpy() 
 
 
-def cal_perlin_fbm(cells=4, layers=6):
+def cal_perlin_fbm(cells=8, layers=4):
     perlin_noise_np = None
     for i in range(1, layers+1):        
         if i == 1:
