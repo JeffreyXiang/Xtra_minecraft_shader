@@ -111,7 +111,7 @@ float LUT_cloud_transmittance(vec3 viewPos, vec3 rayDir) {
 
 
 
-vec3 LUT_sky_till_clouds(vec3 viewPos, vec3 rayDir) {
+void LUT_sky_till_clouds(vec3 viewPos, vec3 rayDir, out vec3 lum, out vec3 transmittance) {
     float height = length(viewPos);
     vec3 up = viewPos / height;
 
@@ -129,9 +129,13 @@ vec3 LUT_sky_till_clouds(vec3 viewPos, vec3 rayDir) {
     }
     float u = azimuthAngle / (2.0*PI);
     float v = 0.5 + 0.5*sign(altitudeAngle)*sqrt(altitudeAngle/(sign(altitudeAngle)*0.5*PI-horizonAngle));
-    return texture2D(colortex15, vec2(
+    lum = texture2D(colortex15, vec2(
         (256.5 + u * 255) / LUT_WIDTH,
-        (256.5 + v * 255) / LUT_HEIGHT
+        (256.5 + v * 128) / LUT_HEIGHT
+    )).rgb;
+    transmittance = texture2D(colortex15, vec2(
+        (256.5 + u * 255) / LUT_WIDTH,
+        (384.5 + v * 128) / LUT_HEIGHT
     )).rgb;
 }
 
@@ -259,7 +263,9 @@ void main() {
                         }
                         if ((groundDist.x < 0 || groundDist.x > tMin) && tMax > 0 && tMax > tMin) {
                             raymarchClouds(view_pos, ray_dir, sun_dir, tMin, tMax, CLOUDS_SAMPLES, lum, transmittance);
-                            cloud_data = vec4(LUT_sky_till_clouds(view_pos, ray_dir) * (1 - transmittance) + lum, transmittance);
+                            vec3 atmo_lum, atmo_transmittance;
+                            LUT_sky_till_clouds(view_pos, ray_dir, atmo_lum, atmo_transmittance);
+                            cloud_data = vec4(atmo_lum * (1 - transmittance) + lum * atmo_transmittance, transmittance);
                         }
                 }
             }

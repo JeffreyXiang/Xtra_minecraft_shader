@@ -346,10 +346,10 @@ void main() {
         }
 
         /* ATMOSPHERE */
-        LUT_texcoord = vec2((texcoord.x * LUT_WIDTH - 256) / 256, (texcoord.y * LUT_HEIGHT - 256) / 256);
+        LUT_texcoord = vec2((texcoord.x * LUT_WIDTH - 256) / 256, (texcoord.y * LUT_HEIGHT - 256) / 128);
         if (LUT_texcoord.x > 0 && LUT_texcoord.x < 1 && LUT_texcoord.y > 0 && LUT_texcoord.y < 1) {
             float u = (LUT_texcoord.x * 256 - 0.5) / 255;
-            float v = (LUT_texcoord.y * 256 - 0.5) / 255;
+            float v = (LUT_texcoord.y * 128 - 0.5) / 127;
             
             float azimuthAngle = (u - 0.5) * 2.0 * PI;
             
@@ -385,6 +385,47 @@ void main() {
                     }
             }
             LUT_data = vec4(lum, 1.0);
+        }
+
+        LUT_texcoord = vec2((texcoord.x * LUT_WIDTH - 256) / 256, (texcoord.y * LUT_HEIGHT - 384) / 128);
+        if (LUT_texcoord.x > 0 && LUT_texcoord.x < 1 && LUT_texcoord.y > 0 && LUT_texcoord.y < 1) {
+            float u = (LUT_texcoord.x * 256 - 0.5) / 255;
+            float v = (LUT_texcoord.y * 128 - 0.5) / 127;
+            
+            float azimuthAngle = (u - 0.5) * 2.0 * PI;
+            
+            float coord = 2 * v - 1;
+            float altitudeAngle = coord*coord*(sign(coord)*0.5*PI-horizonAngle) + horizonAngle;
+            
+            float cosAltitude = cos(altitudeAngle);
+            vec3 rayDir = vec3(cosAltitude*sin(azimuthAngle), sin(altitudeAngle), -cosAltitude*cos(azimuthAngle));
+            
+            vec3 sunDir = normalize(view_coord_to_world_coord(sunPosition));
+            
+            float tMin, tMax;
+            vec3 lum=vec3(0.0), transmittance=vec3(1.0);
+            vec2 atmoDist = rayIntersectSphere(view_pos, rayDir, atmosphereRadiusMM);
+            vec2 groundDist = rayIntersectSphere(view_pos, rayDir, groundRadiusMM);
+            if (atmoDist.y > 0) {
+                    vec2 cloudBottomDist = rayIntersectSphere(view_pos, rayDir, cloudBottomRadiusMM);
+                    vec2 cloudTopDist = rayIntersectSphere(view_pos, rayDir, cloudBottomRadiusMM+cloudHeightMM);
+                    if (height < cloudBottomRadiusMM) {
+                        tMin = cloudBottomDist.y;
+                        tMax = cloudTopDist.y;
+                    }
+                    else if (height < cloudBottomRadiusMM+cloudHeightMM) {
+                        tMin = 0;
+                        tMax = cloudBottomDist.x > 0 ? cloudBottomDist.x : cloudTopDist.y;
+                    }
+                    else {
+                        tMin = cloudTopDist.x;
+                        tMax = cloudBottomDist.x > 0 ? cloudBottomDist.x : cloudTopDist.y;
+                    }
+                    if ((groundDist.x < 0 || groundDist.x > tMin) && tMax > 0 && tMin > 0) {
+                        raymarchScattering(view_pos, rayDir, sunDir, 0, tMin, ATMOSPHERE_SAMPLES / 8, lum, transmittance);
+                    }
+            }
+            LUT_data = vec4(transmittance, 1.0);
         }
     }
     #endif
