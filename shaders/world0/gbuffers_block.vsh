@@ -26,7 +26,7 @@ void main() {
     gl_Position.xy += vec2((Halton2[idx] * 2 - 1) * gl_Position.w / viewWidth, (Halton3[idx] * 2 - 1) * gl_Position.w / viewHeight);
 #endif
     color = gl_Color.rgb;
-    color *= (abs(gl_Normal.x) == 1 ? 5./3.*0.9 : 1) * (abs(gl_Normal.z) == 1 ? 5./4.*0.95 : 1);
+    // color *= gl_Color.a * (abs(gl_Normal.x) == 1 ? 5./3. : 1) * (abs(gl_Normal.z) == 1 ? 5./4. : 1);
     texcoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).st;
     normal = gl_NormalMatrix * gl_Normal.xyz;
     lightMapCoord = (gl_TextureMatrix[1] * gl_MultiTexCoord1).st;

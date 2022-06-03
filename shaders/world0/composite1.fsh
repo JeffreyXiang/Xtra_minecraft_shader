@@ -193,6 +193,7 @@ void main() {
         vec3 world_coord = view_coord_to_world_coord(view_coord);
         vec3 shadow_coord = world_coord_to_shadow_coord(world_coord);
         float shadow_dist = length(shadow_coord.xy * 2 - 1);
+        float water_current_depth = shadow_coord.z;
         float shadow_depth = abs(dot(view_coord, light_direction) * dot(normal_s, light_direction));
         float k = SHADOW_EPSILON / fish_len_distortion_grad(shadow_dist);
         view_coord += k * mix(shadow_cos_ * normal_s, shadow_cot_ * light_direction, clamp(0.05 / (k * shadow_cot_), 0, 1));
@@ -231,7 +232,7 @@ void main() {
         vec3 sky_light = SKY_ILLUMINATION_INTENSITY * LUT_sky_light() + (1 - SHADOW_INTENSITY) * sunmoon_light;
         sunmoon_light *= SHADOW_INTENSITY;
         if (isEyeInWater == 0 && depth_w < 1.5 || isEyeInWater == 1 && (depth_w > 1.5 || depth_g < depth_w)) {
-            float shadow_water_dist = -((current_depth - texture2D(shadowtex0, shadow_texcoord).x) * 2 - 1 - shadowProjection[3][2]) / shadowProjection[2][2];
+            float shadow_water_dist = -((water_current_depth - texture2D(shadowtex0, shadow_texcoord).x) * 2 - 1 - shadowProjection[3][2]) / shadowProjection[2][2];
             shadow_water_dist = shadow_water_dist < 0 ? 0 : shadow_water_dist;
             float k = fog((1 - sky_light_s) * 15, FOG_WATER_DECAY);
             sky_light *= k * LUT_water_absorption(k);

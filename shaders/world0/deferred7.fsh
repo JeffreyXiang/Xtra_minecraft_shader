@@ -131,11 +131,11 @@ void LUT_sky_till_clouds(vec3 viewPos, vec3 rayDir, out vec3 lum, out vec3 trans
     float v = 0.5 + 0.5*sign(altitudeAngle)*sqrt(altitudeAngle/(sign(altitudeAngle)*0.5*PI-horizonAngle));
     lum = texture2D(colortex15, vec2(
         (256.5 + u * 255) / LUT_WIDTH,
-        (256.5 + v * 128) / LUT_HEIGHT
+        (256.5 + v * 127) / LUT_HEIGHT
     )).rgb;
     transmittance = texture2D(colortex15, vec2(
         (256.5 + u * 255) / LUT_WIDTH,
-        (384.5 + v * 128) / LUT_HEIGHT
+        (384.5 + v * 127) / LUT_HEIGHT
     )).rgb;
 }
 
