@@ -97,7 +97,7 @@ vec3 view_coord_to_world_coord(vec3 view_coord) {
 
 vec3 LUT_sky_light() {
     vec2 uv = vec2(32.5 / LUT_WIDTH,
-                   67.5 / LUT_HEIGHT);
+                   98.5 / LUT_HEIGHT);
     return texture2D(colortex15, uv).rgb;
 }
 

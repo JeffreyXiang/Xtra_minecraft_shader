@@ -157,7 +157,7 @@ vec3 LUT_sun_color(vec3 sunDir) {
 
 vec3 LUT_sky_light() {
     vec2 uv = vec2(32.5 / LUT_WIDTH,
-                   67.5 / LUT_HEIGHT);
+                   98.5 / LUT_HEIGHT);
     return texture2D(colortex15, uv).rgb;
 }
 

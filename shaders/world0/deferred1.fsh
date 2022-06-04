@@ -11,9 +11,9 @@
 #define ATMOSPHERE_SAMPLES 32
 
 #define CLOUDS_ENABLE 1 // [0 1]
-#define CLOUDS_RATIO 0.3 // [0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
+#define CLOUDS_RATIO 0.3 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define CLOUDS_SAMPLES 128
-#define CLOUDS_SCATTER_BASE 10000
+#define CLOUDS_SCATTER_BASE 25000
 #define CLOUDS_ABSORB_BASE 10000
 #define CLOUDS_WIND vec2(0.26861928, 0.96324643)
 #define CLOUDS_NV0 vec2(-0.0806,  0.1613)
@@ -28,6 +28,8 @@
 
 #if CLOUDS_ENABLE
 uniform sampler2D noisetex;
+uniform sampler2D colortex12;
+uniform sampler3D colortex13;
 uniform sampler3D colortex14;
 #endif
 uniform sampler2D colortex15;
@@ -174,6 +176,12 @@ void raymarchScattering(
 }
 
 #if CLOUDS_ENABLE
+vec3 LUT_cloud_sky_light(vec3 sun_dir) {
+    vec2 uv = vec2((32.5 + 223 * (sun_dir.y * 0.5 + 0.5)) / LUT_WIDTH,
+                   67.5 / LUT_HEIGHT);
+    return texture2D(colortex15, uv).rgb;
+}
+
 const float cloudBottomRadiusMM = 6.3605;
 const float cloudHeightMM = 0.001;
 const float cloudRenderMaxRadiusMM = 6.38;
@@ -184,6 +192,56 @@ float cloud_weight(float cloud_fract) {
 
 float remap(float v, float ori_l, float ori_h, float new_l, float new_h) {
     return clamp((v - ori_l) / (ori_h - ori_l), 0, 1) * (new_h - new_l) + new_l;
+}
+
+float cloud_density_(vec3 p) {
+    float offset = (
+        texture2D(noisetex, fract(p.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV0)).r +
+        texture2D(noisetex, fract(p.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV1)).r +
+        texture2D(noisetex, fract(p.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV2)).g +
+        texture2D(noisetex, fract(p.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV3)).g +
+        texture2D(noisetex, fract(p.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV4)).b +
+        texture2D(noisetex, fract(p.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV5)).b - 3
+        ) / 6;
+    float cloud_fract = 0.1 * (length(p) - cloudBottomRadiusMM) / cloudHeightMM;
+    float density = cloud_weight(cloud_fract) * remap(
+        texture3D(colortex13, vec3(
+            p.xz / 0.0219721 + frameTimeCounter * CLOUDS_WIND * 2e-3,
+            cloud_fract - frameTimeCounter * 5e-3 + offset)).r,
+        1 - CLOUDS_RATIO, 1, 0, 1);
+    return density;
+}
+
+float cloud_density(vec3 p) {
+    vec2 weather_map_texcoord = fract((p.xz + frameTimeCounter * CLOUDS_WIND * 5e-5) / 0.076259);
+    vec2 weather_data = texture2D(colortex12, weather_map_texcoord).xy;
+    float weather = max(
+        remap(weather_data.x, max(0., 0.5 - CLOUDS_RATIO), max(0.5, 1 - CLOUDS_RATIO), 0, 1),
+        max(0.0, CLOUDS_RATIO - 0.5) * 2 * remap(weather_data.y, -max(0.0, CLOUDS_RATIO - 0.5) * 2, 1, 0, 1));
+    
+    float height_fract = (length(p) - cloudBottomRadiusMM) / cloudHeightMM;
+    
+    float cloud_peak = 0.2 + 0.8 * CLOUDS_RATIO;
+    float height_weight = clamp(remap(height_fract, 0, 0.07 * cloud_peak, 0, 1), 0, 1) * clamp(remap(height_fract, 0.2 * cloud_peak, cloud_peak, 1, 0), 0, 1);
+    float global_density = height_fract * clamp(remap(height_fract, 0, 0.15, 0, 1), 0, 1) * clamp(remap(height_fract, 0.9, 1, 1, 0), 0, 1);
+
+    vec3 rough_shape_texcoord = fract(vec3(
+        (p.xz + frameTimeCounter * CLOUDS_WIND * 7e-5) / 0.00219721,
+        (p.y - frameTimeCounter * 7e-6) / 0.00219721));
+    float rough_shape_data = texture3D(colortex13, rough_shape_texcoord).r;
+    float rough_shape = clamp(remap(rough_shape_data * height_weight, 1 - weather, 1, 0, 1), 0, 1);
+
+    float density = rough_shape * global_density;
+
+    // vec3 fine_shape_texcoord = fract(vec3(
+    //     (p.xz + frameTimeCounter * CLOUDS_WIND * 10e-5) / 0.00027941,
+    //     (p.y - frameTimeCounter * 10e-6) / 0.00027941));
+    // float fine_shape_data = texture3D(colortex14, fine_shape_texcoord).r;
+    // float fine_shape = 0.2 * exp(-0.75 * CLOUDS_RATIO) * min(1, 5 * height_fract) * (1 - fine_shape_data);
+
+    // float density = clamp(remap(rough_shape, fine_shape, 1, 0, 1), 0, 1) * global_density;
+
+    return sqrt(density);
 }
 
 void raymarchClouds(
@@ -216,30 +274,16 @@ void raymarchClouds(
         t = newT;
         
         vec3 newPos = pos + t*rayDir;
-        float cloud_fract = 0.1 * (length(newPos) - cloudBottomRadiusMM) / cloudHeightMM;
-
-        float offset = (
-            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV0)).r +
-            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV1)).r +
-            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV2)).g +
-            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV3)).g +
-            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV4)).b +
-            texture2D(noisetex, fract(newPos.xz / 7.4279 + frameTimeCounter * 5e-4 * CLOUDS_NV5)).b - 3
-            ) / 6;
-
-        float density = cloud_weight(cloud_fract) * remap(
-            texture3D(colortex14, vec3(
-                newPos.xz / 0.0219721 + frameTimeCounter * CLOUDS_WIND * 2e-3,
-                cloud_fract - frameTimeCounter * 5e-3 + offset)).r,
-            1 - CLOUDS_RATIO, 1, 0, 1);
+        float density = cloud_density(newPos);
         float extinction = (CLOUDS_SCATTER_BASE + CLOUDS_ABSORB_BASE) * density;
         float scatterring = CLOUDS_SCATTER_BASE * density;
         float sampleTransmittance = exp(-dt*extinction);
         float k = density * 1;
         vec3 sunmoon_light = mix(vec3(MOON_INTENSITY), LUT_atmosphere_transmittance(newPos, sunDir), sunmoon_light_mix);
+        vec3 sky_light = LUT_cloud_sky_light(sunDir);
         vec3 scatteringIntegral = scatterring * (1 - sampleTransmittance) / (extinction + 1e-6)
             * exp(-k) * (1 - exp(-2 * k))
-            * sunmoon_light;
+            * (sunmoon_light + sky_light);
 
         lum += scatteringIntegral*transmittance;
         transmittance *= sampleTransmittance;

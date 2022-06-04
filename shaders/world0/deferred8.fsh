@@ -9,7 +9,7 @@
 #define SKY_ILLUMINATION_INTENSITY 20.0  //[5.0 10.0 15.0 20.0 25.0 30.0 35.0 40.0 45.0 50.0]
 
 #define CLOUDS_ENABLE 1 // [0 1]
-#define CLOUDS_RES_SCALE 0.5 // [0.25 0.5 1]
+#define CLOUDS_RES_SCALE 0.5 // [0 0.25 0.5 1]
 
 #define LUT_WIDTH 512
 #define LUT_HEIGHT 512
@@ -19,7 +19,6 @@ uniform sampler2D gnormal;
 #if CLOUDS_ENABLE
 uniform sampler2D noisetex;
 uniform sampler2D colortex8;
-uniform sampler3D colortex14;
 #endif
 uniform sampler2D colortex15;
 
@@ -84,6 +83,29 @@ vec3 LUT_sky(vec3 viewPos, vec3 rayDir) {
     )).rgb;
 }
 
+vec3 LUT_sky_reflect(vec3 viewPos, vec3 rayDir) {
+    float height = length(viewPos);
+    vec3 up = viewPos / height;
+    
+    float horizonAngle = height > groundRadiusMM ? -asin(sqrt(height * height - groundRadiusMM * groundRadiusMM) / height) : 0;
+    float altitudeAngle = asin(dot(rayDir, up)) - horizonAngle; // Between -PI/2 and PI/2
+    float azimuthAngle; // Between 0 and 2*PI
+    if (abs(rayDir.y) > (1 - 1e-6)) {
+        // Looking nearly straight up or down.
+        azimuthAngle = 0.0;
+    } else {
+        vec3 projectedDir = normalize(rayDir - up*(dot(rayDir, up)));
+        float sinTheta = projectedDir.x;
+        float cosTheta = -projectedDir.z;
+        azimuthAngle = atan(sinTheta, cosTheta) + PI;
+    }
+    float u = azimuthAngle / (2.0*PI);
+    float v = 0.5 + 0.5*sign(altitudeAngle)*sqrt(altitudeAngle/(sign(altitudeAngle)*0.5*PI-horizonAngle));
+    return texture2D(colortex15, vec2(
+        (0.5 + u * 255) / LUT_WIDTH,
+        (256.5 + v * 255) / LUT_HEIGHT
+    )).rgb;
+}
 
 vec3 cal_sun_bloom(vec3 view_pos, vec3 ray_dir, vec3 sun_dir) {
     vec3 color = vec3(0.0);
@@ -126,7 +148,7 @@ vec3 cal_moon_bloom(vec3 view_pos, vec3 ray_dir, vec3 moon_dir) {
 }
 
 vec3 cal_sky_color(vec3 view_pos, vec3 ray_dir, vec3 sun_dir, vec3 moon_dir) {
-    vec3 color = LUT_sky(view_pos, ray_dir);
+    vec3 color = CLOUDS_RES_SCALE > 0 ? LUT_sky(view_pos, ray_dir) : LUT_sky_reflect(view_pos, ray_dir);
     color += cal_sun_bloom(view_pos, ray_dir, sun_dir);
     color += cal_moon_bloom(view_pos, ray_dir, moon_dir);
     return color;
@@ -149,8 +171,10 @@ void main() {
         color_s = cal_sky_color(view_pos, ray_dir, sun_dir, moon_dir);
 
         #if CLOUDS_ENABLE
-        vec4 cloud_data = texture2D(colortex8, texcoord * CLOUDS_RES_SCALE); 
-        color_s = color_s * cloud_data.a + cloud_data.rgb;
+        if (CLOUDS_RES_SCALE > 0) {
+            vec4 cloud_data = texture2D(colortex8, texcoord * CLOUDS_RES_SCALE); 
+            color_s = color_s * cloud_data.a + cloud_data.rgb;
+        }
         #endif
 
         color_s *= SKY_ILLUMINATION_INTENSITY;
