@@ -18,9 +18,9 @@ _w: water
 ----------------------------------------------------------------------------------------------------------------
      |               |         | r |     depth_w      |     depth_s      |     depth_s      |     depth_s      |
      |               |         |--------------------------------------------------------------------------------
-     |               |         | g |   sky_light_w    |     depth_w      |     depth_w      |     depth_w      |
+     |               |         | g |  block_light_w   |     depth_w      |     depth_w      |     depth_w      |
   1  |   gdepth      | RGBA32F |--------------------------------------------------------------------------------
-     |               |         | b |    block_id_w    |     depth_g      |     depth_g      |     depth_g      |
+     |               |         | b |   sky_light_w    |     depth_g      |     depth_g      |     depth_g      |
      |               |         |--------------------------------------------------------------------------------
      |               |         | a |                  |                  |                  |                  |
 ----------------------------------------------------------------------------------------------------------------
@@ -46,7 +46,7 @@ _w: water
   4  |   gaux1       | RGBA16F |----                  |                  |                  |                  |
      |               |         | b |                  |                  |                  |                  |
      |               |         |--------------------------------------------------------------------------------
-     |               |         | a |                  |                  |                  |                  |
+     |               |         | a |                  |   sky_light_w    |   sky_light_w    |   sky_light_w    |
 ----------------------------------------------------------------------------------------------------------------
      |               |         | r |                  |                  |                  |                  |
      |               |         |----                  |                  |                  |                  |
@@ -54,21 +54,21 @@ _w: water
   5  |   gaux2       | RGBA16F |----                  |                  |                  |                  |
      |               |         | b |                  |                  |                  |                  |
      |               |         |--------------------------------------------------------------------------------
-     |               |         | a |                  |                  |                  |                  |
+     |               |         | a |                  |   sky_light_g    |   sky_light_g    |   sky_light_g    |
 ----------------------------------------------------------------------------------------------------------------
      |               |         | r |  block_light_s   |  block_light_s   |  block_light_s   |  block_light_s   |
      |               |         |---|------------------|---------------------------------------------------------
      |               |         | g |   sky_light_s    |   sky_light_s    |   sky_light_s    |   sky_light_s    |
   6  |   gaux3       | RGBA16F |--------------------------------------------------------------------------------
-     |               |         | b |                  |   sky_light_w    |   sky_light_w    |   sky_light_w    |
+     |               |         | b |                  |  block_light_w   |  block_light_w   |  block_light_w   |
      |               |         |--------------------------------------------------------------------------------
-     |               |         | a |                  |   sky_light_g    |   sky_light_g    |   sky_light_g    |
+     |               |         | a |                  |  block_light_g   |  block_light_g   |  block_light_g   |
 ----------------------------------------------------------------------------------------------------------------
      |               |         | r |     depth_g      |      dist_s      |      dist_s      |      dist_s      |
      |               |         |--------------------------------------------------------------------------------
-     |               |         | g |   sky_light_g    |      dist_w      |      dist_w      |      dist_w      |
+     |               |         | g |  block_light_g   |      dist_w      |      dist_w      |      dist_w      |
   7  |   gaux4       | RGBA32F |--------------------------------------------------------------------------------
-     |               |         | b |    block_id_g    |      dist_g      |      dist_g      |      dist_g      |
+     |               |         | b |   sky_light_g    |      dist_g      |      dist_g      |      dist_g      |
      |               |         |--------------------------------------------------------------------------------
      |               |         | a |                  |                  |      clip_z      |      clip_z      |
 ----------------------------------------------------------------------------------------------------------------
@@ -220,19 +220,21 @@ void main() {
     vec3 ao = vec3(texture2D(colortex9, texcoord).a);
     vec3 gi_prev = vec3(texture2D(colortex10, texcoord).rgb);
     vec3 ao_prev = vec3(texture2D(colortex10, texcoord).a);
-    vec3 depth_s = vec3(texture2D(gdepth, texcoord).x);
-    vec3 depth_w = vec3(texture2D(gdepth, texcoord).y);
-    vec3 depth_g = vec3(texture2D(gdepth, texcoord).z);
+    vec3 depth_s = vec3(texture2D(gdepth, texcoord).x / 2);
+    vec3 depth_w = vec3(texture2D(gdepth, texcoord).y / 2);
+    vec3 depth_g = vec3(texture2D(gdepth, texcoord).z / 2);
     vec3 normal_s = vec3(texture2D(gnormal, texcoord).rgb * 0.5 + 0.5);
     vec3 block_id_s = vec3(texture2D(gnormal, texcoord).a / 2);
     vec3 color_g = vec3(texture2D(composite, texcoord).rgb);
     vec3 alpha = vec3(texture2D(composite, texcoord).a);
     vec3 normal_w = vec3(texture2D(gaux1, texcoord).rgb * 0.5 + 0.5);
+    vec3 sky_light_w = vec3(texture2D(gaux1, texcoord).a);
     vec3 normal_g = vec3(texture2D(gaux2, texcoord).rgb * 0.5 + 0.5);
+    vec3 sky_light_g = vec3(texture2D(gaux2, texcoord).a);
     vec3 block_light_s = vec3(texture2D(gaux3, texcoord).x);
     vec3 sky_light_s = vec3(texture2D(gaux3, texcoord).y);
-    vec3 sky_light_w = vec3(texture2D(gaux3, texcoord).z);
-    vec3 sky_light_g = vec3(texture2D(gaux3, texcoord).w);
+    vec3 block_light_w = vec3(texture2D(gaux3, texcoord).z);
+    vec3 block_light_g = vec3(texture2D(gaux3, texcoord).w);
     vec3 dist_s = vec3(texture2D(gaux4, texcoord).x / far);
     vec3 dist_w = vec3(texture2D(gaux4, texcoord).y / far);
     vec3 dist_g = vec3(texture2D(gaux4, texcoord).z / far);

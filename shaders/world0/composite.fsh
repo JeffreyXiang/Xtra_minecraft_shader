@@ -13,8 +13,9 @@
 uniform sampler2D gcolor;
 uniform sampler2D gdepth;
 uniform sampler2D gnormal;
-uniform sampler2D composite;
 uniform sampler2D depthtex1;
+uniform sampler2D gaux1;
+uniform sampler2D gaux2;
 uniform sampler2D gaux3;
 uniform sampler2D gaux4;
 uniform sampler2D colortex11;
@@ -84,27 +85,28 @@ int is_dist_match(float dist, vec3 view_dir, vec3 normal_s, vec2 texcoord) {
     return (dist > dist_prev - 2e-3 * k * dist_prev && dist < dist_prev + 2e-3 * k * dist_prev) ? 1 : 0;
 }
 
-/* RENDERTARGETS: 0,1,3,6,7,8,12 */
+/* RENDERTARGETS: 0,1,4,5,6,7,8,12 */
 void main() {
     vec3 color_s = texture2D(gcolor, texcoord).rgb;
-    vec3 data_w = texture2D(gdepth, texcoord).rgb;
+    vec4 data_w = texture2D(gdepth, texcoord);
     float depth_w = data_w.x;
-    float sky_light_w = data_w.y;
-    float block_id_w = data_w.z - 1;
+    float block_light_w = data_w.y;
+    float sky_light_w = data_w.z;
+    float block_id_w = data_w.w;
     vec4 normal_data_s = texture2D(gnormal, texcoord);
     vec3 normal_s = normal_data_s.rgb;
     float block_id_s = normal_data_s.a;
     float depth_s = texture2D(depthtex1, texcoord).x;
-    vec4 color_data_g = texture2D(composite, texcoord);
-    vec3 color_g = color_data_g.rgb;
-    float alpha = color_data_g.a;
+    vec3 normal_w = texture2D(gaux1, texcoord).xyz;
+    vec3 normal_g = texture2D(gaux2, texcoord).xyz;
     vec2 lum_data_s = texture2D(gaux3, texcoord).xy;
     float block_light_s = lum_data_s.x;
     float sky_light_s = lum_data_s.y;
-    vec3 data_g = texture2D(gaux4, texcoord).xyz;
+    vec4 data_g = texture2D(gaux4, texcoord);
     float depth_g = data_g.x;
-    float sky_light_g = data_g.y;
-    float block_id_g = data_g.z;
+    float block_light_g = data_g.y;
+    float sky_light_g = data_g.z;
+    float block_id_g = data_g.w;
 
     float dist_s = 9999;
     float dist_w = 9999;
@@ -134,7 +136,7 @@ void main() {
     
     /* INVERSE GAMMA */
     if (block_id_s > 0.5) color_s = pow(color_s, vec3(GAMMA));
-    if (block_id_g > 0.5) color_g = pow(color_g, vec3(GAMMA));
+    // if (block_id_g > 0.5) color_g = pow(color_g, vec3(GAMMA)); # Done in gbuffer_water
 
     /* MOTION */
     vec2 texcoord_prev = vec2(0.0);
@@ -159,9 +161,10 @@ void main() {
     
     gl_FragData[0] = vec4(color_s, 0.0);
     gl_FragData[1] = vec4(depth_s, depth_w, depth_g, 0.0);
-    gl_FragData[2] = vec4(color_g, alpha);
-    gl_FragData[3] = vec4(block_light_s, sky_light_s, sky_light_w, sky_light_g);
-    gl_FragData[4] = vec4(dist_s, dist_w, dist_g, clip_z);
-    gl_FragData[5] = vec4(color_s, 0.0);
-    gl_FragData[6] = vec4(texcoord_prev, 0.0, has_prev);
+    gl_FragData[2] = vec4(normal_w, sky_light_w);
+    gl_FragData[3] = vec4(normal_g, sky_light_g);
+    gl_FragData[4] = vec4(block_light_s, sky_light_s, block_light_w, block_light_g);
+    gl_FragData[5] = vec4(dist_s, dist_w, dist_g, clip_z);
+    gl_FragData[6] = vec4(color_s, 0.0);
+    gl_FragData[7] = vec4(texcoord_prev, 0.0, has_prev);
 }

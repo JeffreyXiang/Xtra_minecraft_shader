@@ -246,17 +246,17 @@ void main() {
     float depth_s = depth_data.x;
     float depth_w = depth_data.y;
     float depth_g = depth_data.z;
-    vec2 lum_data = texture2D(gaux3, texcoord).zw;
-    float sky_light_w = lum_data.x;
-    float sky_light_g = lum_data.y;
     vec3 dist_data = texture2D(gaux4, texcoord).xyz;
     float dist_s = dist_data.x;
     float dist_w = dist_data.y;
     float dist_g = dist_data.z;
 
     vec3 view_coord_w, view_coord_g, normal_w, normal_g;
+    float sky_light_w, sky_light_g;
     if (depth_w < 1.5) {
-        normal_w = texture2D(gaux1, texcoord).rgb;
+        vec4 data_w = texture2D(gaux1, texcoord);
+        normal_w = data_w.rgb;
+        sky_light_w = data_w.a;
         vec3 screen_coord = vec3(texcoord, depth_w);
         view_coord_w = screen_coord_to_view_coord(screen_coord);
     }
@@ -298,7 +298,7 @@ void main() {
         dist_g = (depth_g < 1.5 ? dist_g : dist_s);
         water_depth = dist_g - dist_w;
         if (water_depth > 0) {
-            texcoord_ = texcoord - 0.1 * water_depth / dist_g * offset.xy;
+            texcoord_ = texcoord - 0.3 * water_depth / dist_g * offset.xy;
             vec2 depth_data = texture2D(gdepth, texcoord_).yz;
             if (depth_data.x < depth_data.y) {
                 texcoord_g = texcoord_;
@@ -378,7 +378,9 @@ void main() {
     depth_g = texture2D(gdepth, texcoord_g).z;
     if (depth_g < 1.5) {
         dist_g = texture2D(gaux4, texcoord_g).z;
-        normal_g = texture2D(gaux2, texcoord_g).rgb;
+        vec4 data_g = texture2D(gaux2, texcoord);
+        normal_g = data_g.rgb;
+        sky_light_g = data_g.a;
         vec3 screen_coord = vec3(texcoord_g, depth_g);
         view_coord_g = screen_coord_to_view_coord(screen_coord);
     }
@@ -391,12 +393,7 @@ void main() {
     if (depth_g < 1.5 && depth_w > depth_g) {
         seed(texcoord);
         reflect_direction_g = reflect(normalize(view_coord_g), normal_g);
-        if (isEyeInWater == 0) fr_g = 1 - dot(reflect_direction_g, normal_g);
-        else {
-            float sin_t = SSR_ETA * length(cross(reflect_direction_g, normal_g));
-            sin_t = sin_t > 1 ? 1 : sin_t;
-            fr_g = 1 - sqrt(1 - sin_t * sin_t);
-        }
+        fr_g = 1 - dot(reflect_direction_g, normal_g);
         fr_g = SSR_F0 + (1 - SSR_F0) * fr_g * fr_g * fr_g * fr_g * fr_g;
         float t = 0, t_oc = 0, t_step, t_in, k, l, h, dist, reflect_dist = dist_g;
         vec3 reflect_coord = view_coord_g, screen_coord;
@@ -482,14 +479,14 @@ void main() {
             }
             else {
                 vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_w * 100));
-                reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * LUT_sky_reflect(view_pos, ray_dir);
-                reflect_color_w += SKY_ILLUMINATION_INTENSITY * sky_light_w / fr_w * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
+                reflect_color_w = SKY_ILLUMINATION_INTENSITY * sky_light_w * sky_light_w * LUT_sky_reflect(view_pos, ray_dir);
+                reflect_color_w += SKY_ILLUMINATION_INTENSITY * sky_light_w * sky_light_w / fr_w * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                 reflect_color_w = mix(fog_color, reflect_color_w, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
             }
             reflect_color_w = mix(fog_color, reflect_color_w, fog(dist_w, FOG_AIR_DECAY));
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
-                color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
+                color_g = color_data_g.rgb;
                 alpha = color_data_g.a;
                 alpha = (1 - fr_g) * alpha + fr_g;
                 if (depth_w > depth_g) {
@@ -499,8 +496,8 @@ void main() {
                     }
                     else {
                         vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
-                        reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky_reflect(view_pos, ray_dir);
-                        reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g / fr_g * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
+                        reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * sky_light_g * LUT_sky_reflect(view_pos, ray_dir);
+                        reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g * sky_light_g / fr_g * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                         reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
                     }
                     color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
@@ -516,7 +513,7 @@ void main() {
             color_s = mix(fog_color, color_s, fog(block_id_s > 0.5 ? dist_s : FOG_AIR_THICKNESS, FOG_AIR_DECAY));
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
-                color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
+                color_g = color_data_g.rgb;
                 alpha = color_data_g.a;
                 alpha = (1 - fr_g) * alpha + fr_g;
                 if (hit_g == 1) {
@@ -525,8 +522,8 @@ void main() {
                 }
                 else {
                     vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
-                    reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * LUT_sky_reflect(view_pos, ray_dir);
-                    reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g / fr_g * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
+                    reflect_color_g = SKY_ILLUMINATION_INTENSITY * sky_light_g * sky_light_g * LUT_sky_reflect(view_pos, ray_dir);
+                    reflect_color_g += SKY_ILLUMINATION_INTENSITY * sky_light_g * sky_light_g / fr_g * (cal_sun_bloom(ray_dir, sun_dir) + cal_moon_bloom(ray_dir, moon_dir));
                     reflect_color_g = mix(fog_color, reflect_color_g, fog(FOG_AIR_THICKNESS, FOG_AIR_DECAY));
                 }
                 color_g = (1 - fr_g) * color_g + fr_g * reflect_color_g; 
@@ -559,7 +556,7 @@ void main() {
             reflect_color_w = k_w * reflect_color_w + sunmoon_light * scatter_w;
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
-                color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
+                color_g = color_data_g.rgb;
                 alpha = color_data_g.a;
                 color_g = k_w * color_g + alpha * sunmoon_light * scatter_w;
             }
@@ -570,7 +567,7 @@ void main() {
             color_s = k * color_s + sunmoon_light * cal_water_color(eye_brightness, block_id_s > 0.5 ? sky_light_s : clamp(eye_brightness + y_s / 15, 0, 1) , y_s, k);
             if (depth_g < 1.5) {
                 color_data_g = texture2D(composite, texcoord_g);
-                color_g = SKY_ILLUMINATION_INTENSITY * color_data_g.rgb;
+                color_g = color_data_g.rgb;
                 alpha = color_data_g.a;
                 alpha = (1 - fr_g) * alpha + fr_g;
                 vec3 ray_dir = normalize(view_coord_to_world_coord(reflect_direction_g * 100));
