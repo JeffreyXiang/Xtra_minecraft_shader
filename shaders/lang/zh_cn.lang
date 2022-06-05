@@ -61,8 +61,8 @@ option.FOG_AIR_DECAY.comment=空气吸收系数。值越大，空气中的雾越
 option.FOG_WATER_DECAY=水体吸收系数
 option.FOG_WATER_DECAY.comment=水体吸收系数。值越大，水越浑浊。无性能影响。
 
-option.FOG_THICKNESS=雾厚度
-option.FOG_THICKNESS.comment=雾厚度。值越大，空气中的雾越厚。无性能影响。
+option.FOG_AIR_THICKNESS=雾厚度
+option.FOG_AIR_THICKNESS.comment=雾厚度。值越大，空气中的雾越厚。无性能影响。
 
 option.GI_RES_SCALE=全局光照分辨率
 option.GI_RES_SCALE.comment=计算全局光照时使用的分辨率。使用缩减的分辨率以提高性能，但会降低质量。剧烈性能影响。

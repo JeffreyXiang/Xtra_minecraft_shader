@@ -27,9 +27,13 @@ const int shadowMapResolution = 4096;   //[1024 2048 4096]
 #define SKY_ILLUMINATION_INTENSITY 20.0  //[5.0 10.0 15.0 20.0 25.0 30.0 35.0 40.0 45.0 50.0]
 #define BASE_ILLUMINATION_INTENSITY 0.01  //[0.0 1e-7 2e-7 5e-7 1e-6 2e-6 5e-6 1e-4 2e-4 5e-4 1e-4 2e-4 5e-4 0.001 0.002 0.005 0.01 0.02 0.05 0.1]
 
-#define FOG_AIR_DECAY 0.001     //[0.0 0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01 0.02 0.05]
-#define FOG_THICKNESS 256
+#define FOG_AIR_DECAY 1e-4      //[0.0 1e-5 2e-5 5e-5 1-e4 2e-4 5e-4 0.001 0.002 0.005 0.01 0.02 0.05]
+#define FOG_AIR_DECAY_RAIN 0.005 //[0.0 1e-5 2e-5 5e-5 1-e4 2e-4 5e-4 0.001 0.002 0.005 0.01 0.02 0.05]
+#define FOG_AIR_THICKNESS 150
+#define FOG_AIR_THICKNESS_RAIN 300
 #define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
+
+#define CLOUDS_ENABLE 1 // [0 1]
 
 #define LUT_WIDTH 512
 #define LUT_HEIGHT 512
@@ -46,7 +50,10 @@ uniform sampler2DShadow shadowtex1;
 uniform float far;
 uniform vec3 shadowLightPosition;
 uniform vec3 sunPosition;
+uniform vec3 moonPosition;
+uniform vec3 cameraPosition;
 uniform int isEyeInWater;
+uniform float rainStrength;
 
 uniform mat4 gbufferModelView;
 uniform mat4 gbufferModelViewInverse;
@@ -73,6 +80,10 @@ vec2 shadowmap_offset(vec2 ori) {
 
 vec2 shadowmap_nearest(vec2 texcoord) {
     return vec2((floor(texcoord.s * shadowMapResolution) + 0.5) / shadowMapResolution, (floor(texcoord.t * shadowMapResolution) + 0.5) / shadowMapResolution);
+}
+
+float grayscale(vec3 color) {
+    return color.r * 0.299 + color.g * 0.587 + color.b * 0.114;
 }
 
 vec2 fish_len_distortion(vec2 ndc_coord_xy) {
@@ -155,6 +166,34 @@ vec3 LUT_sun_color(vec3 sunDir) {
     return texture2D(colortex15, uv).rgb;
 }
 
+const float groundRadiusMM = 6.360;
+const float atmosphereRadiusMM = 6.460;
+const vec3 viewPos = vec3(0.0, groundRadiusMM, 0.0);
+
+float LUT_cloud_transmittance(vec3 viewPos, vec3 rayDir) {
+    float height = length(viewPos);
+    vec3 up = viewPos / height;
+    
+    float horizonAngle = height > groundRadiusMM ? -asin(sqrt(height * height - groundRadiusMM * groundRadiusMM) / height) : 0;
+    float altitudeAngle = asin(dot(rayDir, up)) - horizonAngle; // Between -PI/2 and PI/2
+    float azimuthAngle; // Between 0 and 2*PI
+    if (abs(rayDir.y) > (1 - 1e-6)) {
+        // Looking nearly straight up or down.
+        azimuthAngle = 0.0;
+    } else {
+        vec3 projectedDir = normalize(rayDir - up*(dot(rayDir, up)));
+        float sinTheta = projectedDir.x;
+        float cosTheta = -projectedDir.z;
+        azimuthAngle = atan(sinTheta, cosTheta) + PI;
+    }
+    float u = azimuthAngle / (2.0*PI);
+    float v = 0.5 + 0.5*sign(altitudeAngle)*sqrt(altitudeAngle/(sign(altitudeAngle)*0.5*PI-horizonAngle));
+    return texture2D(colortex15, vec2(
+        (0.5 + u * 255) / LUT_WIDTH,
+        (256.5 + v * 255) / LUT_HEIGHT
+    )).a;
+}
+
 vec3 LUT_sky_light() {
     vec2 uv = vec2(32.5 / LUT_WIDTH,
                    98.5 / LUT_HEIGHT);
@@ -163,6 +202,7 @@ vec3 LUT_sky_light() {
 
 /* RENDERTARGETS: 0 */
 void main() {
+    vec3 view_pos = viewPos + vec3(0, cameraPosition.y * 1e-6, 0);
     vec4 normal_data_s = texture2D(gnormal, texcoord);
     vec3 normal_s = normal_data_s.rgb;
     float block_id_s = normal_data_s.a;
@@ -225,8 +265,14 @@ void main() {
 
         /* ILLUMINATION */
         vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
+        vec3 moon_dir = normalize(view_coord_to_world_coord(moonPosition));
         vec3 sun_light = LUT_sun_color(sun_dir);
+        sun_light = mix(sun_light, vec3(grayscale(sun_light)), rainStrength);
         vec3 moon_light = vec3(MOON_INTENSITY);
+        #if CLOUDS_ENABLE
+        sun_light *= LUT_cloud_transmittance(view_pos, sun_dir);
+        moon_light *= LUT_cloud_transmittance(view_pos, moon_dir);
+        #endif
         float sunmoon_light_mix = smoothstep(0.0, 0.05, sun_dir.y);
         vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sunmoon_light_mix);
         vec3 sky_light = SKY_ILLUMINATION_INTENSITY * LUT_sky_light() + (1 - SHADOW_INTENSITY) * sunmoon_light;
@@ -248,8 +294,9 @@ void main() {
             vec3 block_light = BLOCK_ILLUMINATION_INTENSITY * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST * BLOCK_ILLUMINATION_PHYSICAL_CLOSEST / (block_light_dist * block_light_dist) * block_illumination_color;
         #endif
 
-        k = fog(FOG_THICKNESS, FOG_AIR_DECAY);
-        sky_light *= (in_shadow > 0.5 ? sky_light_s * sky_light_s : 1) * k;
+        float fog_air_decay = mix(FOG_AIR_DECAY, FOG_AIR_DECAY_RAIN, rainStrength);
+        k = fog(max(0.0, FOG_AIR_THICKNESS - cameraPosition.y) / (abs(sun_dir.y) + 1e-2), fog_air_decay);
+        sky_light *= (in_shadow > 0.5 ? sky_light_s * sky_light_s : 1);
         sunmoon_light *= (1 - sun_light_shadow) * k;
         color_s *= block_light + sky_light + sunmoon_light + BASE_ILLUMINATION_INTENSITY;
     }

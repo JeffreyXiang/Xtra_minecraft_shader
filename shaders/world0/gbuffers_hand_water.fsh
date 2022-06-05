@@ -23,29 +23,14 @@ uniform int heldBlockLightValue;
 uniform int heldBlockLightValue2;
 uniform float viewWidth;
 uniform float viewHeight;
-uniform vec3 sunPosition;
-
-uniform mat4 gbufferModelViewInverse;
 
 varying vec3 color;
 varying vec2 texcoord;
 varying vec3 normal;
 varying vec2 lightMapCoord;
 
-vec3 view_coord_to_world_coord(vec3 view_coord) {
-    vec3 world_coord = (gbufferModelViewInverse * vec4(view_coord, 1.0)).xyz;
-    return world_coord;
-}
-
 vec3 LUT_color_temperature(float temp) {
     return texture2D(colortex15, vec2((0.5 + (temp - 1000) / 9000 * 90) / LUT_WIDTH, 0.5 / LUT_HEIGHT)).rgb;
-}
-
-vec3 LUT_sun_color(vec3 sunDir) {
-	float sunCosZenithAngle = sunDir.y;
-    vec2 uv = vec2((0.5 + 255 * clamp(0.5 + 0.5 * sunCosZenithAngle, 0.0, 1.0)) / LUT_WIDTH,
-                   3.5 / LUT_HEIGHT);
-    return texture2D(colortex15, uv).rgb;
 }
 
 vec3 LUT_sky_light() {
@@ -64,13 +49,7 @@ void main() {
     blockColor.rgb = pow(blockColor.rgb, vec3(GAMMA));
 
     // ILLUMINATION
-    vec3 sun_dir = normalize(view_coord_to_world_coord(sunPosition));
-    vec3 sun_light = LUT_sun_color(sun_dir);
-    vec3 moon_light = vec3(MOON_INTENSITY);
-    float sunmoon_light_mix = smoothstep(0.0, 0.05, sun_dir.y);
-    vec3 sunmoon_light = SKY_ILLUMINATION_INTENSITY * mix(moon_light, sun_light, sunmoon_light_mix);
     vec3 sky_light = SKY_ILLUMINATION_INTENSITY * LUT_sky_light();
-
     vec3 block_illumination_color = LUT_color_temperature(BLOCK_ILLUMINATION_COLOR_TEMPERATURE);
     float block_light_g = lightMapCoord.s * 1.066667 - 0.03333333;
     float sky_light_g = lightMapCoord.t * 1.066667 - 0.03333333;

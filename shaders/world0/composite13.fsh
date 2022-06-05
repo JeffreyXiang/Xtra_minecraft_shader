@@ -26,7 +26,8 @@
 #define OUTLINE_ENABLE 1 // [0 1]
 #define OUTLINE_WIDTH 1
 
-#define FOG_AIR_DECAY 0.001     //[0.0 0.0001 0.0002 0.0005 0.001 0.002 0.005 0.01]
+#define FOG_AIR_DECAY 1e-4      //[0.0 1e-5 2e-5 5e-5 1-e4 2e-4 5e-4 0.001 0.002 0.005 0.01 0.02 0.05]
+#define FOG_AIR_DECAY_RAIN 0.005 //[0.0 1e-5 2e-5 5e-5 1-e4 2e-4 5e-4 0.001 0.002 0.005 0.01 0.02 0.05]
 #define FOG_WATER_DECAY 0.1     //[0.01 0.02 0.05 0.1 0.2 0.5 1.0]
 
 #define BLOOM_ENABLE 1 // [0 1]
@@ -57,6 +58,7 @@ uniform int isEyeInWater;
 uniform float centerDepthSmooth;
 uniform ivec2 eyeBrightnessSmooth;
 uniform vec3 sunPosition;
+uniform float rainStrength;
 
 uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelViewInverse;
@@ -215,8 +217,10 @@ void main() {
 
         if (isEyeInWater == 1) 
             color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * FOG_WATER_DECAY)), 0, 100);
-        else
-            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * FOG_AIR_DECAY)), 0, 100);
+        else {
+            float fog_air_decay = mix(FOG_AIR_DECAY, FOG_AIR_DECAY_RAIN, rainStrength);
+            color = clamp(color - mix(vec3(0.0), 0.5 * laplacian * color + 0.1 * laplacian, fog(dist, 4 * fog_air_decay)), 0, 100);
+        }
     }
     #endif
 
