@@ -232,7 +232,8 @@ void main() {
         float shadow_cot_ = shadow_cos_ / shadow_sin_;
         vec3 world_coord = view_coord_to_world_coord(view_coord);
         vec3 shadow_coord = world_coord_to_shadow_coord(world_coord);
-        float shadow_dist = length(shadow_coord.xy * 2 - 1);
+        vec2 shadow_texcoord = fish_len_distortion(shadow_coord.xy * 2 - 1);
+        float shadow_dist = max(abs(shadow_texcoord.x), abs(shadow_texcoord.y));
         float water_current_depth = shadow_coord.z;
         float shadow_depth = abs(dot(view_coord, light_direction) * dot(normal_s, light_direction));
         float k = SHADOW_EPSILON / fish_len_distortion_grad(shadow_dist);
@@ -241,9 +242,9 @@ void main() {
         view_coord += k * light_direction;
         world_coord = view_coord_to_world_coord(view_coord);
         shadow_coord = world_coord_to_shadow_coord(world_coord);
-        float shadow_dist_weight = 1 - smoothstep(0.75, 0.95, shadow_dist);
+        float shadow_dist_weight = 1 - smoothstep(0.95, 1, shadow_dist);
         float current_depth = shadow_coord.z;
-        vec2 shadow_texcoord = fish_len_distortion(shadow_coord.xy * 2 - 1) * 0.5 + 0.5;
+        shadow_texcoord = fish_len_distortion(shadow_coord.xy * 2 - 1) * 0.5 + 0.5;
         float in_shadow = 1 - shadow2D(shadowtex1, vec3(shadow_texcoord, current_depth)).z;
         #if SHADOW_AA_ENABLE
         if (is_shadow_border(shadow_texcoord, current_depth) == 1) {
@@ -296,7 +297,8 @@ void main() {
 
         float fog_air_decay = mix(FOG_AIR_DECAY, FOG_AIR_DECAY_RAIN, rainStrength);
         k = fog(max(0.0, FOG_AIR_THICKNESS - cameraPosition.y) / (abs(sun_dir.y) + 1e-2), fog_air_decay);
-        sky_light *= (in_shadow > 0.5 ? sky_light_s * sky_light_s : 1);
+        // sky_light *= (in_shadow > 0.5 ? sky_light_s * sky_light_s : 1);
+        sky_light *= sky_light_s * sky_light_s;
         sunmoon_light *= (1 - sun_light_shadow) * k;
         color_s *= block_light + sky_light + sunmoon_light + BASE_ILLUMINATION_INTENSITY;
     }
